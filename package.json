@@ -2,7 +2,7 @@
   "name": "kokou-stats",
   "version": "1.0.0",
   "description": "Replica of WoWS Numbers as a computer science project.",
-  "main": "index.js",
+  "main": "server.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
