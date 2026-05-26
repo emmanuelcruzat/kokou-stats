@@ -80,16 +80,17 @@ fetch(`/api/player/${username}`)
     statsContainer.innerHTML = `<p>Error fetching player stats. Please try again later.</p>`;
   });
 
+// column names and labels for the ships table, along with a function to get the value to sort by for each column
 const columns = [
-  { key: "ship_id", label: "Ship ID" },
+  { key: "name", label: "Ship" },
+  { key: "type", label: "Type" },
+  { key: "tier", label: "Tier" },
   { key: "battles", label: "Battles" },
-  { key: "wins", label: "Wins" },
-  { key: "losses", label: "Losses" },
   { key: "winrate", label: "Win Rate" },
   { key: "damage_dealt", label: "Damage Dealt" },
   { key: "avg_damage", label: "Average Damage" },
   { key: "frags", label: "Warships Sunk" },
-  { key: "avg_frags", label: "Average Warships Sunk" },
+  { key: "avg_frags", label: "Average Sunk/Battle" },
   { key: "survival_rate", label: "Survival Rate" },
 ];
 
@@ -97,14 +98,14 @@ function getSortVal(ship, key) {
   const pvp = ship.pvp;
   const played = pvp && pvp.battles > 0;
   switch (key) {
-    case "ship_id":
-      return ship.ship_id;
+    case "name":
+      return ship.name ?? "";
+    case "tier":
+      return ship.tier ?? 0;
+    case "type":
+      return ship.type ?? "";
     case "battles":
       return pvp?.battles ?? 0;
-    case "wins":
-      return pvp?.wins ?? 0;
-    case "losses":
-      return pvp?.losses ?? 0;
     case "winrate":
       return played ? pvp.wins / pvp.battles : -1;
     case "damage_dealt":
@@ -119,6 +120,8 @@ function getSortVal(ship, key) {
       return played ? pvp.survived_battles / pvp.battles : 0;
   }
 }
+
+const romanNumerals = ["I","II","III","IV","V","VI","VII","VIII","IX","X","XI"];
 
 function wrColor(rate) {
   return rate >= 60
@@ -137,7 +140,9 @@ function wrColor(rate) {
 function renderShipsTable(ships, sortCol, sortAsc) {
   const ph = `<td class="placeholder">--</td>`;
   const sorted = [...ships].sort((a, b) => {
-    const diff = getSortVal(a, sortCol) - getSortVal(b, sortCol);
+    const aVal = getSortVal(a, sortCol);
+    const bVal = getSortVal(b, sortCol);
+    const diff = typeof aVal === "string" ? aVal.localeCompare(bVal) : aVal - bVal;
     return sortAsc ? diff : -diff;
   });
 
@@ -153,15 +158,15 @@ function renderShipsTable(ships, sortCol, sortAsc) {
       const pvp = ship.pvp;
       const hasPlayed = pvp && pvp.battles > 0;
       if (!hasPlayed)
-        return `<tr><td>${ship.ship_id}</td><td>0</td><td>0</td><td>0</td>${ph}${ph}${ph}${ph}${ph}${ph}</tr>`;
+        return `<tr><td>${ship.name ?? `<span class="placeholder">Unknown</span>`}</td><td>${ship.type ? (ship.type === "AirCarrier" ? "Aircraft Carrier" : ship.type) : `<span class="placeholder">--</span>`}</td><td>${ship.tier ? (romanNumerals[ship.tier - 1] ?? ship.tier) : `<span class="placeholder">--</span>`}</td><td>0</td>${ph}${ph}${ph}${ph}${ph}${ph}</tr>`;
 
       const wr = (pvp.wins / pvp.battles) * 100;
       return `
       <tr>
-        <td>${ship.ship_id}</td>
+        <td>${ship.name ?? `<span class="placeholder">Unknown</span>`}</td>
+        <td>${ship.type ? (ship.type === "AirCarrier" ? "Aircraft Carrier" : ship.type) : `<span class="placeholder">--</span>`}</td>
+        <td>${ship.tier ? (romanNumerals[ship.tier - 1] ?? ship.tier) : `<span class="placeholder">--</span>`}</td>
         <td>${pvp.battles.toLocaleString()}</td>
-        <td>${pvp.wins.toLocaleString()}</td>
-        <td>${pvp.losses.toLocaleString()}</td>
         <td style="color:${wrColor(wr)}">${wr.toFixed(2)}%</td>
         <td>${pvp.damage_dealt.toLocaleString()}</td>
         <td>${(pvp.damage_dealt / pvp.battles).toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>

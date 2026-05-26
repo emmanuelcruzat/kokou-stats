@@ -246,7 +246,8 @@ tbody td {
   color: #e0e6ed;
 }
 
-tbody td.placeholder {
+tbody td.placeholder,
+.placeholder {
   color: #374e63;
 }
 

@@ -36,15 +36,31 @@ app.get("/api/player/:username", async (req, res) => {
 
 app.get("/api/player/:username/ships", async (req, res) => {
   const username = req.params.username;
-  const response = await axios.get(
+  const searchRes = await axios.get(
     `https://api.worldofwarships.com/wows/account/list/?application_id=${process.env.WOWS_API_KEY}&search=${username}`,
   );
 
-  const accountId = response.data.data[0].account_id;
-  const shipData = await axios.get(
-    `https://api.worldofwarships.com/wows/ships/stats/?application_id=8bef8d52a6ece3ab64303f1564ac8468&account_id=${accountId}`,
+  const accountId = searchRes.data.data[0].account_id;
+  const shipStatsRes = await axios.get(
+    `https://api.worldofwarships.com/wows/ships/stats/?application_id=${process.env.WOWS_API_KEY}&account_id=${accountId}`,
   );
-  res.send(shipData.data);
+
+  const ships = shipStatsRes.data.data[accountId];
+  const shipIds = ships.map((s) => s.ship_id).join(",");
+
+  const encyclopediaRes = await axios.get(
+    `https://api.worldofwarships.com/wows/encyclopedia/ships/?application_id=${process.env.WOWS_API_KEY}&ship_id=${shipIds}&fields=name,tier,type`,
+  );
+
+  const encyclopedia = encyclopediaRes.data.data;
+  const enrichedShips = ships.map((ship) => ({
+    ...ship,
+    name: encyclopedia[ship.ship_id]?.name ?? null,
+    tier: encyclopedia[ship.ship_id]?.tier ?? null,
+    type: encyclopedia[ship.ship_id]?.type ?? null,
+  }));
+
+  res.send({ ...shipStatsRes.data, data: { [accountId]: enrichedShips } });
 });
 
 // temporary route to get a player's winrate
