@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Kokou Stats</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header>
+      <h1>Kokou Stats</h1>
+      <nav>
+        <ul>
+          <li><a href="/">Home</a></li>
+          <li><a href="/about">About</a></li>
+          <li><a href="/contact">Contact</a></li>
+        </ul>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero">
+        <h2>Welcome to Kokou Stats</h2>
+        <p>
+          Your go-to source for your World of Warships statistics. Created by
+          one of the destroyer captains of all time.
+        </p>
+      </section>
+
+      <section class="search">
+        <h2>Search Player</h2>
+        <form action="/player/:username" method="GET">
+          <label for="username">Username:</label>
+          <input type="text" id="username" name="username" required />
+          <button type="submit" id="view-stats">View Stats</button>
+        </form>
+      </section>
+    </main>
+
+    <footer>
+      <p>&copy; 2026 Kokou Stats. All rights reserved.</p>
+    </footer>
+
+    <script src="index.js"></script>
+  </body>
+</html>
