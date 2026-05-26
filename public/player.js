@@ -37,7 +37,7 @@ fetch(`/api/player/${username}`)
         </div>
       </div>
       <div class="stat-grid">
-        <div class="stat-card">
+        <div class="stat-card stat-card-battle">
           <h3>Battle Record</h3>
           ${(() => {
             const next = wrNextTier(winRate);
@@ -46,6 +46,7 @@ fetch(`/api/player/${username}`)
               : "";
             return `
               <div class="winrate-display" style="color:${currentWrColor}">
+                <div class="metric-label">Random Battles Winrate</div>
                 <div class="winrate-top">
                   <div class="winrate-pct">${winRate.toFixed(2)}%</div>
                   <div class="winrate-label">${wrLabel(winRate)}</div>
@@ -54,11 +55,39 @@ fetch(`/api/player/${username}`)
               </div>
             `;
           })()}
+          <div class="winrate-display" id="pr-display" style="color:#546e7a">
+            <div class="metric-label">WoWS Numbers Personal Rating (PR)</div>
+            <div class="winrate-top">
+              <div class="metric-pct" id="pr-num">—</div>
+              <div class="winrate-label" id="pr-tier"></div>
+            </div>
+            <div class="winrate-next" id="pr-next"></div>
+          </div>
+          ${(() => {
+            const kei = pvp.damage_scouting / pvp.battles / 1000 + winRate;
+            const nextKEI = keiNextTier(kei);
+            const nextKEIText = nextKEI
+              ? `<div class="winrate-next" style="color:${keiColor(kei + parseFloat(nextKEI.needed))}">+${nextKEI.needed} to ${nextKEI.label}</div>`
+              : "";
+            return `
+              <div class="winrate-display" style="color:${keiColor(kei)}">
+                <div class="metric-label">Kokou's Effectiveness Index (KEI)</div>
+                <div class="winrate-top">
+                  <div class="metric-pct">${kei.toFixed(2)}</div>
+                  <div class="winrate-label">${keiLabel(kei)}</div>
+                </div>
+                ${nextKEIText}
+              </div>
+            `;
+          })()}
           ${row("Battles", pvp.battles.toLocaleString())}
           ${row("Wins", pvp.wins.toLocaleString())}
           ${row("Losses", pvp.losses.toLocaleString())}
           ${row("Draws", pvp.draws.toLocaleString())}
           ${row("Survival Rate", `${((pvp.survived_battles / pvp.battles) * 100).toFixed(2)}%`)}
+        </div>
+        <div class="stat-card stat-card-medals">
+          <h3>Medals</h3>
         </div>
         <div class="stat-card">
           <h3>Damage</h3>
@@ -129,35 +158,35 @@ function getSortVal(ship, key) {
 }
 
 const nationLabel = {
-  italy:        "Kingdom of Italy",
-  uk:           "United Kingdom",
-  netherlands:  "Netherlands",
-  france:       "France",
-  usa:          "United States",
-  germany:      "German Reich",
-  europe:       "Pan-Europe",
-  japan:        "Empire of Japan",
-  ussr:         "Soviet Union",
+  italy: "Kingdom of Italy",
+  uk: "United Kingdom",
+  netherlands: "Netherlands",
+  france: "France",
+  usa: "United States",
+  germany: "German Reich",
+  europe: "Pan-Europe",
+  japan: "Empire of Japan",
+  ussr: "Soviet Union",
   commonwealth: "British Commonwealth",
-  pan_asia:     "Pan-Asia",
-  spain:        "Spanish State",
-  pan_america:  "Pan-America",
+  pan_asia: "Pan-Asia",
+  spain: "Spanish State",
+  pan_america: "Pan-America",
 };
 
 const nationCoalition = {
-  usa:          "Allies",
-  uk:           "Allies",
-  france:       "Allies",
+  usa: "Allies",
+  uk: "Allies",
+  france: "Allies",
   commonwealth: "Allies",
-  netherlands:  "Allies",
-  ussr:         "Allies",
-  pan_america:  "Allies",
-  germany:      "Axis",
-  japan:        "Axis",
-  italy:        "Axis",
-  spain:        "Non-Aligned",
-  europe:       "Non-Aligned",
-  pan_asia:     "Non-Aligned",
+  netherlands: "Allies",
+  ussr: "Allies",
+  pan_america: "Allies",
+  germany: "Axis",
+  japan: "Axis",
+  italy: "Axis",
+  spain: "Non-Aligned",
+  europe: "Non-Aligned",
+  pan_asia: "Non-Aligned",
 };
 
 const romanNumerals = [
@@ -226,6 +255,145 @@ function wrColor(rate) {
                 : "#e74c3c";
 }
 
+const prTiers = [
+  { threshold: 750, label: "Below Average" },
+  { threshold: 1100, label: "Average" },
+  { threshold: 1350, label: "Good" },
+  { threshold: 1550, label: "Very Good" },
+  { threshold: 1750, label: "Great" },
+  { threshold: 2100, label: "Unicum" },
+  { threshold: 2450, label: "Super Unicum" },
+];
+
+function prNextTier(pr) {
+  const next = prTiers.find((t) => pr < t.threshold);
+  if (!next) return null;
+  return { label: next.label, needed: next.threshold - pr };
+}
+
+const keiTiers = [
+  { threshold: 50, label: "Below Average" },
+  { threshold: 58, label: "Average" },
+  { threshold: 63, label: "Good" },
+  { threshold: 68, label: "Very Good" },
+  { threshold: 73, label: "Great" },
+  { threshold: 80, label: "Unicum" },
+  { threshold: 90, label: "Super Unicum" },
+];
+
+function keiNextTier(kei) {
+  const next = keiTiers.find((t) => kei < t.threshold);
+  if (!next) return null;
+  return { label: next.label, needed: (next.threshold - kei).toFixed(2) };
+}
+
+function keiColor(kei) {
+  return kei >= 90
+    ? "#a855f7"
+    : kei >= 80
+      ? "#9b59b6"
+      : kei >= 73
+        ? "#3498db"
+        : kei >= 68
+          ? "#1abc9c"
+          : kei >= 63
+            ? "#2ecc71"
+            : kei >= 58
+              ? "#f1c40f"
+              : kei >= 50
+                ? "#e67e22"
+                : "#e74c3c";
+}
+
+function keiLabel(kei) {
+  return kei >= 90
+    ? "Super Unicum"
+    : kei >= 80
+      ? "Unicum"
+      : kei >= 73
+        ? "Great"
+        : kei >= 68
+          ? "Very Good"
+          : kei >= 63
+            ? "Good"
+            : kei >= 58
+              ? "Average"
+              : kei >= 50
+                ? "Below Average"
+                : "Bad";
+}
+
+function prLabel(pr) {
+  return pr >= 2450
+    ? "Super Unicum"
+    : pr >= 2100
+      ? "Unicum"
+      : pr >= 1750
+        ? "Great"
+        : pr >= 1550
+          ? "Very Good"
+          : pr >= 1350
+            ? "Good"
+            : pr >= 1100
+              ? "Average"
+              : pr >= 750
+                ? "Below Average"
+                : "Bad";
+}
+
+function prColor(pr) {
+  return pr >= 2450
+    ? "#a855f7"
+    : pr >= 2100
+      ? "#9b59b6"
+      : pr >= 1750
+        ? "#3498db"
+        : pr >= 1550
+          ? "#1abc9c"
+          : pr >= 1350
+            ? "#2ecc71"
+            : pr >= 1100
+              ? "#f1c40f"
+              : pr >= 750
+                ? "#e67e22"
+                : "#e74c3c";
+}
+
+function calculatePR(ships, expectedData) {
+  let actualDmg = 0,
+    actualFrags = 0,
+    actualWins = 0;
+  let expectedDmg = 0,
+    expectedFrags = 0,
+    expectedWins = 0;
+
+  ships.forEach((ship) => {
+    const pvp = ship.pvp;
+    if (!pvp || pvp.battles === 0) return;
+    const exp = expectedData[ship.ship_id];
+    if (!exp) return;
+
+    actualDmg += pvp.damage_dealt;
+    actualFrags += pvp.frags;
+    actualWins += pvp.wins;
+    expectedDmg += exp.average_damage_dealt * pvp.battles;
+    expectedFrags += exp.average_frags * pvp.battles;
+    expectedWins += (exp.win_rate / 100) * pvp.battles;
+  });
+
+  if (expectedDmg === 0) return null;
+
+  const rDmg = actualDmg / expectedDmg;
+  const rFrags = actualFrags / expectedFrags;
+  const rWins = actualWins / expectedWins;
+
+  const nDmg = Math.max(0, (rDmg - 0.4) / 0.6);
+  const nFrags = Math.max(0, (rFrags - 0.1) / 0.9);
+  const nWins = Math.max(0, (rWins - 0.7) / 0.3);
+
+  return Math.round(700 * nDmg + 300 * nFrags + 150 * nWins);
+}
+
 function renderShipsTable(ships, sortCol, sortAsc) {
   const ph = `<td class="placeholder">--</td>`;
   const sorted = [...ships].sort((a, b) => {
@@ -279,9 +447,11 @@ function renderShipsTable(ships, sortCol, sortAsc) {
   `;
 }
 
-fetch(`/api/player/${username}/ships`)
-  .then((response) => response.json())
-  .then((data) => {
+Promise.all([
+  fetch(`/api/player/${username}/ships`).then((r) => r.json()),
+  fetch(`/api/expected`).then((r) => r.json()),
+])
+  .then(([data, expectedRes]) => {
     const shipsContainer = document.getElementById("ships-container");
     const ships = data.data[Object.keys(data.data)[0]];
 
@@ -375,7 +545,11 @@ fetch(`/api/player/${username}/ships`)
     }
 
     makeChart("chart-class", Object.keys(byClass), Object.values(byClass));
-    const nationChart = makeChart("chart-nation", Object.keys(byNation), Object.values(byNation));
+    const nationChart = makeChart(
+      "chart-nation",
+      Object.keys(byNation),
+      Object.values(byNation),
+    );
 
     const toggleNation = document.getElementById("toggle-nation");
     const toggleCoalition = document.getElementById("toggle-coalition");
@@ -383,7 +557,10 @@ fetch(`/api/player/${username}/ships`)
     function updateNationChart(labels, values) {
       nationChart.data.labels = labels;
       nationChart.data.datasets[0].data = values;
-      nationChart.data.datasets[0].backgroundColor = chartColors.slice(0, labels.length);
+      nationChart.data.datasets[0].backgroundColor = chartColors.slice(
+        0,
+        labels.length,
+      );
       nationChart.update();
     }
 
@@ -405,6 +582,19 @@ fetch(`/api/player/${username}/ships`)
       tierEntries.map(([t]) => romanNumerals[t - 1] ?? t),
       tierEntries.map(([, v]) => v),
     );
+
+    const pr = calculatePR(ships, expectedRes.data);
+    if (pr !== null) {
+      const nextPR = prNextTier(pr);
+      document.getElementById("pr-display").style.color = prColor(pr);
+      document.getElementById("pr-num").textContent = pr.toLocaleString();
+      document.getElementById("pr-tier").textContent = prLabel(pr);
+      const prNextEl = document.getElementById("pr-next");
+      if (nextPR) {
+        prNextEl.textContent = `+${nextPR.needed} to ${nextPR.label}`;
+        prNextEl.style.color = prColor(pr + nextPR.needed);
+      }
+    }
 
     shipsContainer.innerHTML = renderShipsTable(ships, sortCol, sortAsc);
 

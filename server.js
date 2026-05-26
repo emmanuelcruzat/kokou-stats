@@ -82,6 +82,18 @@ app.get("/api/player/:username/ships", async (req, res) => {
   }
 });
 
+app.get("/api/expected", async (req, res) => {
+  try {
+    const response = await axios.get(
+      "https://api.wows-numbers.com/personal/rating/expected/json/",
+    );
+    res.json(response.data);
+  } catch (err) {
+    console.error("Error fetching expected values:", err.message);
+    res.status(500).json({ error: "Failed to fetch expected values" });
+  }
+});
+
 // temporary route to get a player's winrate
 app.get("/player/:username/wr", async (req, res) => {
   const username = req.params.username;
