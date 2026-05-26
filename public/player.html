@@ -5,20 +5,35 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Kokou Stats</title>
     <link rel="stylesheet" href="/styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   </head>
   <body>
-    <header>
-      <h1>Kokou Stats</h1>
+<header>
+      <h1><a href="/">Kokou Stats</a></h1>
       <nav>
         <ul>
           <li><a href="/">Home</a></li>
           <li><a href="/about">About</a></li>
-          <li><a href="/contact">Contact</a></li>
+          <li>
+            <a
+              href="https://emmanuelcruzat.github.io/portfolio-dva/"
+              target="_blank"
+              >Contact</a
+            >
+          </li>
         </ul>
       </nav>
     </header>
 
     <main>
+      <section class="search">
+        <h2>Search Player</h2>
+        <form action="/player/:username" method="GET">
+          <label for="username">Username:</label>
+          <input type="text" id="username" name="username" required />
+          <button type="submit" id="view-stats">View Stats</button>
+        </form>
+      </section>
       <section id="stats-container">
         <h2>Player Stats</h2>
         <p>Loading player stats...</p>
@@ -27,10 +42,41 @@
         <h2>Error</h2>
         <p>Unable to load player statistics. Please try again later.</p>
       </section>
+      <div class="charts-grid">
+        <div class="chart-card">
+          <h3>Battles by Ship Class</h3>
+          <canvas id="chart-class"></canvas>
+        </div>
+        <div class="chart-card">
+          <div class="chart-card-header">
+            <h3>Battles by Nation</h3>
+            <div class="chart-toggle">
+              <button class="toggle-btn active" id="toggle-nation">Nation</button>
+              <button class="toggle-btn" id="toggle-coalition">Coalition</button>
+            </div>
+          </div>
+          <canvas id="chart-nation"></canvas>
+        </div>
+        <div class="chart-card">
+          <h3>Battles by Tier</h3>
+          <canvas id="chart-tier"></canvas>
+        </div>
+      </div>
+      <section id="ships-container">
+        <h2>Ships</h2>
+        <p>Loading ship statistics...</p>
+      </section>
     </main>
 
     <footer>
-      <p>&copy; 2026 Kokou Stats. All rights reserved.</p>
+      <p>
+        &copy; 2026 Kokou Stats. All rights reserved. | &copy; 2026
+        Wargaming.net. All rights reserved.
+      </p>
+      <p>
+        This is application is a third-party tool under Wargaming Developers
+        Partner Program.
+      </p>
     </footer>
     <script src="/player.js"></script>
   </body>
