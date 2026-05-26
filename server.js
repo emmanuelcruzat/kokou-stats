@@ -25,47 +25,61 @@ app.get("/api", (req, res) => {
 
 //main player data
 app.get("/api/player/:username", async (req, res) => {
-  const username = req.params.username;
-  // basic route to obtain a user that we want to fetch stats for
+  try {
+    const username = req.params.username;
+    const response = await axios.get(
+      `https://api.worldofwarships.com/wows/account/list/?application_id=${process.env.WOWS_API_KEY}&search=${username}`,
+    );
 
-  const response = await axios.get(
-    `https://api.worldofwarships.com/wows/account/list/?application_id=${process.env.WOWS_API_KEY}&search=${username}`,
-  );
-
-  const accountId = response.data.data[0].account_id;
-  const accountData = await axios.get(
-    `https://api.worldofwarships.com/wows/account/info/?application_id=${process.env.WOWS_API_KEY}&account_id=${accountId}`,
-  );
-  res.send(accountData.data);
+    const accountId = response.data.data[0].account_id;
+    const accountData = await axios.get(
+      `https://api.worldofwarships.com/wows/account/info/?application_id=${process.env.WOWS_API_KEY}&account_id=${accountId}`,
+    );
+    res.send(accountData.data);
+  } catch (err) {
+    console.error("Error fetching player stats:", err.message);
+    res.status(500).json({ error: "Failed to fetch player stats" });
+  }
 });
 
 app.get("/api/player/:username/ships", async (req, res) => {
-  const username = req.params.username;
-  const searchRes = await axios.get(
-    `https://api.worldofwarships.com/wows/account/list/?application_id=${process.env.WOWS_API_KEY}&search=${username}`,
-  );
+  try {
+    const username = req.params.username;
+    const searchRes = await axios.get(
+      `https://api.worldofwarships.com/wows/account/list/?application_id=${process.env.WOWS_API_KEY}&search=${username}`,
+    );
 
-  const accountId = searchRes.data.data[0].account_id;
-  const shipStatsRes = await axios.get(
-    `https://api.worldofwarships.com/wows/ships/stats/?application_id=${process.env.WOWS_API_KEY}&account_id=${accountId}`,
-  );
+    const accountId = searchRes.data.data[0].account_id;
+    const shipStatsRes = await axios.get(
+      `https://api.worldofwarships.com/wows/ships/stats/?application_id=${process.env.WOWS_API_KEY}&account_id=${accountId}`,
+    );
 
-  const ships = shipStatsRes.data.data[accountId];
-  const shipIds = ships.map((s) => s.ship_id).join(",");
+    const ships = shipStatsRes.data.data[accountId];
+    const shipIds = ships.map((s) => s.ship_id);
 
-  const encyclopediaRes = await axios.get(
-    `https://api.worldofwarships.com/wows/encyclopedia/ships/?application_id=${process.env.WOWS_API_KEY}&ship_id=${shipIds}&fields=name,tier,type`,
-  );
+    // encyclopedia API accepts at most 100 ship IDs per request
+    const encyclopedia = {};
+    for (let i = 0; i < shipIds.length; i += 100) {
+      const chunk = shipIds.slice(i, i + 100).join(",");
+      const encyclopediaRes = await axios.get(
+        `https://api.worldofwarships.com/wows/encyclopedia/ships/?application_id=${process.env.WOWS_API_KEY}&ship_id=${chunk}&fields=name,tier,type,nation`,
+      );
+      Object.assign(encyclopedia, encyclopediaRes.data.data);
+    }
 
-  const encyclopedia = encyclopediaRes.data.data;
-  const enrichedShips = ships.map((ship) => ({
-    ...ship,
-    name: encyclopedia[ship.ship_id]?.name ?? null,
-    tier: encyclopedia[ship.ship_id]?.tier ?? null,
-    type: encyclopedia[ship.ship_id]?.type ?? null,
-  }));
+    const enrichedShips = ships.map((ship) => ({
+      ...ship,
+      name: encyclopedia[ship.ship_id]?.name ?? null,
+      tier: encyclopedia[ship.ship_id]?.tier ?? null,
+      type: encyclopedia[ship.ship_id]?.type ?? null,
+      nation: encyclopedia[ship.ship_id]?.nation ?? null,
+    }));
 
-  res.send({ ...shipStatsRes.data, data: { [accountId]: enrichedShips } });
+    res.send({ ...shipStatsRes.data, data: { [accountId]: enrichedShips } });
+  } catch (err) {
+    console.error("Error fetching ship stats:", err.message);
+    res.status(500).json({ error: "Failed to fetch ship stats" });
+  }
 });
 
 // temporary route to get a player's winrate

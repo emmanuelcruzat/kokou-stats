@@ -5,10 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Kokou Stats</title>
     <link rel="stylesheet" href="/styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   </head>
   <body>
-    <header>
-      <h1>Kokou Stats</h1>
+<header>
+      <h1><a href="/">Kokou Stats</a></h1>
       <nav>
         <ul>
           <li><a href="/">Home</a></li>
@@ -41,6 +42,26 @@
         <h2>Error</h2>
         <p>Unable to load player statistics. Please try again later.</p>
       </section>
+      <div class="charts-grid">
+        <div class="chart-card">
+          <h3>Battles by Ship Class</h3>
+          <canvas id="chart-class"></canvas>
+        </div>
+        <div class="chart-card">
+          <div class="chart-card-header">
+            <h3>Battles by Nation</h3>
+            <div class="chart-toggle">
+              <button class="toggle-btn active" id="toggle-nation">Nation</button>
+              <button class="toggle-btn" id="toggle-coalition">Coalition</button>
+            </div>
+          </div>
+          <canvas id="chart-nation"></canvas>
+        </div>
+        <div class="chart-card">
+          <h3>Battles by Tier</h3>
+          <canvas id="chart-tier"></canvas>
+        </div>
+      </div>
       <section id="ships-container">
         <h2>Ships</h2>
         <p>Loading ship statistics...</p>

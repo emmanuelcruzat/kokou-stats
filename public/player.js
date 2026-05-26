@@ -128,6 +128,38 @@ function getSortVal(ship, key) {
   }
 }
 
+const nationLabel = {
+  italy:        "Kingdom of Italy",
+  uk:           "United Kingdom",
+  netherlands:  "Netherlands",
+  france:       "France",
+  usa:          "United States",
+  germany:      "German Reich",
+  europe:       "Pan-Europe",
+  japan:        "Empire of Japan",
+  ussr:         "Soviet Union",
+  commonwealth: "British Commonwealth",
+  pan_asia:     "Pan-Asia",
+  spain:        "Spanish State",
+  pan_america:  "Pan-America",
+};
+
+const nationCoalition = {
+  usa:          "Allies",
+  uk:           "Allies",
+  france:       "Allies",
+  commonwealth: "Allies",
+  netherlands:  "Allies",
+  ussr:         "Allies",
+  pan_america:  "Allies",
+  germany:      "Axis",
+  japan:        "Axis",
+  italy:        "Axis",
+  spain:        "Non-Aligned",
+  europe:       "Non-Aligned",
+  pan_asia:     "Non-Aligned",
+};
+
 const romanNumerals = [
   "I",
   "II",
@@ -255,6 +287,124 @@ fetch(`/api/player/${username}/ships`)
 
     let sortCol = "battles";
     let sortAsc = false;
+
+    // aggregate battles by class, nation, tier, and coalition
+    const byClass = {};
+    const byNation = {};
+    const byTierNum = {};
+    const byCoalition = {};
+    ships.forEach((ship) => {
+      const battles = ship.pvp?.battles ?? 0;
+      if (battles === 0) return;
+      if (ship.type) {
+        const t = ship.type === "AirCarrier" ? "Aircraft Carrier" : ship.type;
+        byClass[t] = (byClass[t] ?? 0) + battles;
+      }
+      if (ship.nation) {
+        const n = nationLabel[ship.nation] ?? ship.nation;
+        byNation[n] = (byNation[n] ?? 0) + battles;
+        const c = nationCoalition[ship.nation] ?? ship.nation;
+        byCoalition[c] = (byCoalition[c] ?? 0) + battles;
+      }
+      if (ship.tier) {
+        byTierNum[ship.tier] = (byTierNum[ship.tier] ?? 0) + battles;
+      }
+    });
+
+    //code for the charts, uses chart.js to display a doughnut chart of battles by class and nation
+    const chartColors = [
+      "#3498db",
+      "#e74c3c",
+      "#2ecc71",
+      "#f1c40f",
+      "#9b59b6",
+      "#1abc9c",
+      "#e67e22",
+      "#e91e63",
+      "#00bcd4",
+      "#8bc34a",
+      "#ff5722",
+    ];
+
+    function makeBarChart(id, labels, values) {
+      new Chart(document.getElementById(id), {
+        type: "bar",
+        data: {
+          labels,
+          datasets: [
+            {
+              data: values,
+              backgroundColor: chartColors.slice(0, labels.length),
+              borderWidth: 0,
+            },
+          ],
+        },
+        options: {
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { ticks: { color: "#e0e6ed" }, grid: { color: "#1e3448" } },
+            y: { ticks: { color: "#e0e6ed" }, grid: { color: "#1e3448" } },
+          },
+        },
+      });
+    }
+
+    function makeChart(id, labels, values) {
+      return new Chart(document.getElementById(id), {
+        type: "doughnut",
+        data: {
+          labels,
+          datasets: [
+            {
+              data: values,
+              backgroundColor: chartColors.slice(0, labels.length),
+              borderColor: "#132232",
+              borderWidth: 2,
+            },
+          ],
+        },
+        options: {
+          plugins: {
+            legend: {
+              position: "bottom",
+              labels: { color: "#e0e6ed", font: { size: 12 }, padding: 12 },
+            },
+          },
+        },
+      });
+    }
+
+    makeChart("chart-class", Object.keys(byClass), Object.values(byClass));
+    const nationChart = makeChart("chart-nation", Object.keys(byNation), Object.values(byNation));
+
+    const toggleNation = document.getElementById("toggle-nation");
+    const toggleCoalition = document.getElementById("toggle-coalition");
+
+    function updateNationChart(labels, values) {
+      nationChart.data.labels = labels;
+      nationChart.data.datasets[0].data = values;
+      nationChart.data.datasets[0].backgroundColor = chartColors.slice(0, labels.length);
+      nationChart.update();
+    }
+
+    toggleNation.addEventListener("click", () => {
+      updateNationChart(Object.keys(byNation), Object.values(byNation));
+      toggleNation.classList.add("active");
+      toggleCoalition.classList.remove("active");
+    });
+
+    toggleCoalition.addEventListener("click", () => {
+      updateNationChart(Object.keys(byCoalition), Object.values(byCoalition));
+      toggleCoalition.classList.add("active");
+      toggleNation.classList.remove("active");
+    });
+
+    const tierEntries = Object.entries(byTierNum).sort(([a], [b]) => a - b);
+    makeBarChart(
+      "chart-tier",
+      tierEntries.map(([t]) => romanNumerals[t - 1] ?? t),
+      tierEntries.map(([, v]) => v),
+    );
 
     shipsContainer.innerHTML = renderShipsTable(ships, sortCol, sortAsc);
 
