@@ -23,56 +23,63 @@ fetch(`/api/player/${username}`)
     const pvp = accountData.statistics.pvp;
     const winRate = (pvp.wins / pvp.battles) * 100;
 
-    // color scheme to indicate the player's winrate
-    const wrColor =
-      winRate >= 60
-        ? "#9b59b6"
-        : winRate >= 55
-          ? "#1abc9c"
-          : winRate >= 52
-            ? "#2ecc71"
-            : winRate >= 49
-              ? "#f1c40f"
-              : winRate >= 47
-                ? "#e67e22"
-                : "#e74c3c";
+    const currentWrColor = wrColor(winRate);
+
+    const row = (label, value) =>
+      `<div class="stat-row"><span class="stat-label">${label}</span><span class="stat-value">${value}</span></div>`;
 
     statsContainer.innerHTML = `
-        <h2>${accountData.nickname}'s Stats</h2>
-        <p>Last Updated: ${new Date(accountData.stats_updated_at * 1000).toLocaleString()}</p>
-        <p>Last Battle Time: ${new Date(
-          accountData.last_battle_time * 1000,
-        ).toLocaleString()}</p>
-        <h3>Win Rate: <span style="color: ${wrColor}">${winRate.toFixed(2)}%</span></h3>
-        <p>Random Battles: ${pvp.battles.toLocaleString()}</p>
-        <p>Wins: ${pvp.wins.toLocaleString()}</p>
-        <p>Losses: ${pvp.losses.toLocaleString()}</p>
-        <p>Draws: ${pvp.draws.toLocaleString()}</p>
-        <p>Damage Dealt: ${pvp.damage_dealt.toLocaleString()}</p>
-        <p>Average Damage per Battle: ${(
-          pvp.damage_dealt / pvp.battles
-        ).toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
-        <p>Warships Sunk: ${pvp.frags.toLocaleString()}</p>
-        <p>Average Warships Sunk per Battle: ${(
-          pvp.frags / pvp.battles
-        ).toFixed(2)}</p>
-        <p>Total Experience: ${pvp.xp.toLocaleString()}</p>
-        <p>Average Experience per Battle: ${(
-          pvp.xp / pvp.battles
-        ).toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
-        <p>Survival Rate: ${(
-          (pvp.survived_battles / pvp.battles) *
-          100
-        ).toFixed(2)}%</p>
-        <p>Destruction Ratio: ${(
-          pvp.frags /
-          (pvp.battles - pvp.survived_battles)
-        ).toFixed(2)}</p>
-        <p>Spotting Damage: ${pvp.damage_scouting.toLocaleString()}</p>
-        <p>Average Spotting Damage per Battle: ${(
-          pvp.damage_scouting / pvp.battles
-        ).toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
-      `;
+      <div class="player-header">
+        <h2>${accountData.nickname}</h2>
+        <div class="player-meta">
+          <span>Last Battle: ${new Date(accountData.last_battle_time * 1000).toLocaleString()}</span>
+          <span>Updated: ${new Date(accountData.stats_updated_at * 1000).toLocaleString()}</span>
+        </div>
+      </div>
+      <div class="stat-grid">
+        <div class="stat-card">
+          <h3>Battle Record</h3>
+          ${(() => {
+            const next = wrNextTier(winRate);
+            const nextText = next
+              ? `<div class="winrate-next" style="color:${wrColor(parseFloat(winRate) + parseFloat(next.needed))}">+${next.needed}% to ${next.label}</div>`
+              : "";
+            return `
+              <div class="winrate-display" style="color:${currentWrColor}">
+                <div class="winrate-top">
+                  <div class="winrate-pct">${winRate.toFixed(2)}%</div>
+                  <div class="winrate-label">${wrLabel(winRate)}</div>
+                </div>
+                ${nextText}
+              </div>
+            `;
+          })()}
+          ${row("Battles", pvp.battles.toLocaleString())}
+          ${row("Wins", pvp.wins.toLocaleString())}
+          ${row("Losses", pvp.losses.toLocaleString())}
+          ${row("Draws", pvp.draws.toLocaleString())}
+          ${row("Survival Rate", `${((pvp.survived_battles / pvp.battles) * 100).toFixed(2)}%`)}
+        </div>
+        <div class="stat-card">
+          <h3>Damage</h3>
+          ${row("Damage Dealt", pvp.damage_dealt.toLocaleString())}
+          ${row("Avg Damage / Battle", (pvp.damage_dealt / pvp.battles).toLocaleString(undefined, { maximumFractionDigits: 0 }))}
+          ${row("Spotting Damage", pvp.damage_scouting.toLocaleString())}
+          ${row("Avg Spotting / Battle", (pvp.damage_scouting / pvp.battles).toLocaleString(undefined, { maximumFractionDigits: 0 }))}
+        </div>
+        <div class="stat-card">
+          <h3>Combat</h3>
+          ${row("Warships Sunk", pvp.frags.toLocaleString())}
+          ${row("Avg Sunk / Battle", (pvp.frags / pvp.battles).toFixed(2))}
+          ${row("Destruction Ratio", (pvp.frags / (pvp.battles - pvp.survived_battles)).toFixed(2))}
+        </div>
+        <div class="stat-card">
+          <h3>Experience</h3>
+          ${row("Total XP", pvp.xp.toLocaleString())}
+          ${row("Avg XP / Battle", (pvp.xp / pvp.battles).toLocaleString(undefined, { maximumFractionDigits: 0 }))}
+        </div>
+      </div>
+    `;
   })
   .catch((error) => {
     console.error("Error fetching player stats:", error);
@@ -121,20 +128,70 @@ function getSortVal(ship, key) {
   }
 }
 
-const romanNumerals = ["I","II","III","IV","V","VI","VII","VIII","IX","X","XI"];
+const romanNumerals = [
+  "I",
+  "II",
+  "III",
+  "IV",
+  "V",
+  "VI",
+  "VII",
+  "VIII",
+  "IX",
+  "X",
+  "XI",
+];
+
+const wrTiers = [
+  { threshold: 47, label: "Below Average" },
+  { threshold: 49, label: "Average" },
+  { threshold: 52, label: "Good" },
+  { threshold: 54, label: "Very Good" },
+  { threshold: 56, label: "Great" },
+  { threshold: 60, label: "Unicum" },
+  { threshold: 65, label: "Super Unicum" },
+];
+
+function wrNextTier(rate) {
+  const next = wrTiers.find((t) => rate < t.threshold);
+  if (!next) return null;
+  return { label: next.label, needed: (next.threshold - rate).toFixed(2) };
+}
+
+function wrLabel(rate) {
+  return rate >= 65
+    ? "Super Unicum"
+    : rate >= 60
+      ? "Unicum"
+      : rate >= 56
+        ? "Great"
+        : rate >= 54
+          ? "Very Good"
+          : rate >= 52
+            ? "Good"
+            : rate >= 49
+              ? "Average"
+              : rate >= 47
+                ? "Below Average"
+                : "Bad";
+}
 
 function wrColor(rate) {
-  return rate >= 60
-    ? "#9b59b6"
-    : rate >= 55
-      ? "#1abc9c"
-      : rate >= 52
-        ? "#2ecc71"
-        : rate >= 49
-          ? "#f1c40f"
-          : rate >= 47
-            ? "#e67e22"
-            : "#e74c3c";
+  return rate >= 65
+    ? "#a855f7"
+    : rate >= 60
+      ? "#9b59b6"
+      : rate >= 56
+        ? "#3498db"
+        : rate >= 54
+          ? "#1abc9c"
+          : rate >= 52
+            ? "#2ecc71"
+            : rate >= 49
+              ? "#f1c40f"
+              : rate >= 47
+                ? "#e67e22"
+                : "#e74c3c";
 }
 
 function renderShipsTable(ships, sortCol, sortAsc) {
@@ -142,7 +199,8 @@ function renderShipsTable(ships, sortCol, sortAsc) {
   const sorted = [...ships].sort((a, b) => {
     const aVal = getSortVal(a, sortCol);
     const bVal = getSortVal(b, sortCol);
-    const diff = typeof aVal === "string" ? aVal.localeCompare(bVal) : aVal - bVal;
+    const diff =
+      typeof aVal === "string" ? aVal.localeCompare(bVal) : aVal - bVal;
     return sortAsc ? diff : -diff;
   });
 

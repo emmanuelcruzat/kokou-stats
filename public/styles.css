@@ -140,24 +140,90 @@ main {
 /* Player stats page */
 
 #stats-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.player-header {
   background-color: #132232;
   border: 1px solid #1e3448;
   border-radius: 8px;
-  padding: 2rem;
+  padding: 1.75rem 2rem;
 }
 
-#stats-container h2 {
+.player-header h2 {
   color: #c9a84c;
+  font-size: 2rem;
+  margin-bottom: 0.5rem;
+}
+
+.player-meta {
+  display: flex;
+  gap: 2rem;
+  font-size: 0.85rem;
+  color: #546e7a;
+}
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+}
+
+.stat-card {
+  background-color: #132232;
+  border: 1px solid #1e3448;
+  border-radius: 8px;
+  padding: 1.25rem 1.5rem;
+}
+
+.stat-card h3 {
+  color: #c9a84c;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
   margin-bottom: 1rem;
-  font-size: 1.4rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid #1e3448;
+}
+
+.winrate-display {
+  margin-bottom: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #1e3448;
+}
+
+.winrate-top {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+}
+
+.winrate-pct {
+  font-size: 2.5rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.winrate-label {
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.winrate-next {
+  font-size: 0.8rem;
+  font-weight: 400;
+  margin-top: 0.15rem;
+  opacity: 0.85;
 }
 
 .stat-row {
   display: flex;
   justify-content: space-between;
-  padding: 0.6rem 0;
-  border-bottom: 1px solid #1e3448;
-  font-size: 0.95rem;
+  padding: 0.45rem 0;
+  border-bottom: 1px solid #1a2e42;
+  font-size: 0.9rem;
 }
 
 .stat-row:last-child {
@@ -205,6 +271,8 @@ main {
 
 .table-wrapper {
   overflow-x: auto;
+  border-radius: 8px;
+  overflow: hidden;
 }
 
 table {
