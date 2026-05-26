@@ -63,20 +63,20 @@ fetch(`/api/player/${username}`)
         <div class="stat-card">
           <h3>Damage</h3>
           ${row("Damage Dealt", pvp.damage_dealt.toLocaleString())}
-          ${row("Avg Damage / Battle", (pvp.damage_dealt / pvp.battles).toLocaleString(undefined, { maximumFractionDigits: 0 }))}
+          ${row("Avg. Damage / Battle", (pvp.damage_dealt / pvp.battles).toLocaleString(undefined, { maximumFractionDigits: 0 }))}
           ${row("Spotting Damage", pvp.damage_scouting.toLocaleString())}
-          ${row("Avg Spotting / Battle", (pvp.damage_scouting / pvp.battles).toLocaleString(undefined, { maximumFractionDigits: 0 }))}
+          ${row("Avg. Spotting / Battle", (pvp.damage_scouting / pvp.battles).toLocaleString(undefined, { maximumFractionDigits: 0 }))}
         </div>
         <div class="stat-card">
-          <h3>Combat</h3>
+          <h3>Sinks</h3>
           ${row("Warships Sunk", pvp.frags.toLocaleString())}
-          ${row("Avg Sunk / Battle", (pvp.frags / pvp.battles).toFixed(2))}
+          ${row("Avg. Sunk / Battle", (pvp.frags / pvp.battles).toFixed(2))}
           ${row("Destruction Ratio", (pvp.frags / (pvp.battles - pvp.survived_battles)).toFixed(2))}
         </div>
         <div class="stat-card">
           <h3>Experience</h3>
           ${row("Total XP", pvp.xp.toLocaleString())}
-          ${row("Avg XP / Battle", (pvp.xp / pvp.battles).toLocaleString(undefined, { maximumFractionDigits: 0 }))}
+          ${row("Avg. XP / Battle", (pvp.xp / pvp.battles).toLocaleString(undefined, { maximumFractionDigits: 0 }))}
         </div>
       </div>
     `;
@@ -95,9 +95,9 @@ const columns = [
   { key: "battles", label: "Battles" },
   { key: "winrate", label: "Win Rate" },
   { key: "damage_dealt", label: "Damage Dealt" },
-  { key: "avg_damage", label: "Average Damage" },
+  { key: "Avg._damage", label: "Avg. Damage" },
   { key: "frags", label: "Warships Sunk" },
-  { key: "avg_frags", label: "Average Sunk/Battle" },
+  { key: "Avg._frags", label: "Avg. Sunk / Battle" },
   { key: "survival_rate", label: "Survival Rate" },
 ];
 
@@ -117,11 +117,11 @@ function getSortVal(ship, key) {
       return played ? pvp.wins / pvp.battles : -1;
     case "damage_dealt":
       return pvp?.damage_dealt ?? 0;
-    case "avg_damage":
+    case "Avg._damage":
       return played ? pvp.damage_dealt / pvp.battles : 0;
     case "frags":
       return pvp?.frags ?? 0;
-    case "avg_frags":
+    case "Avg._frags":
       return played ? pvp.frags / pvp.battles : 0;
     case "survival_rate":
       return played ? pvp.survived_battles / pvp.battles : 0;

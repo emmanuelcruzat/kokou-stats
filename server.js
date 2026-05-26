@@ -11,6 +11,11 @@ app.get("/player/:username", async (req, res) => {
   res.sendFile(__dirname + "/public/player.html");
 });
 
+// route to serve the about page
+app.get("/about", async (req, res) => {
+  res.sendFile(__dirname + "/public/about.html");
+});
+
 // API ROUTES
 
 // basic route to check if the API is running
