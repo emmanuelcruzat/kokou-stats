@@ -14,7 +14,6 @@ fetch(`/api/player/${username}`)
     const accountData = data.data[Object.keys(data.data)[0]];
     statsContainer.innerHTML = `
         <h2>${accountData.nickname}'s Stats</h2>
-        <p>Level: ${accountData.level}</p>
         <p>Last Battle Time: ${new Date(
           accountData.last_battle_time * 1000,
         ).toLocaleString()}</p>
