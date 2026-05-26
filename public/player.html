@@ -19,6 +19,14 @@
     </header>
 
     <main>
+      <section class="search">
+        <h2>Search Player</h2>
+        <form action="/player/:username" method="GET">
+          <label for="username">Username:</label>
+          <input type="text" id="username" name="username" required />
+          <button type="submit" id="view-stats">View Stats</button>
+        </form>
+      </section>
       <section id="stats-container">
         <h2>Player Stats</h2>
         <p>Loading player stats...</p>
@@ -26,6 +34,10 @@
       <section class="error-message" style="display: none">
         <h2>Error</h2>
         <p>Unable to load player statistics. Please try again later.</p>
+      </section>
+      <section id="ships-container">
+        <h2>Ships</h2>
+        <p>Loading ship statistics...</p>
       </section>
     </main>
 

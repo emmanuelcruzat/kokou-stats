@@ -51,7 +51,7 @@ nav a:hover {
 
 main {
   flex: 1;
-  max-width: 800px;
+  max-width: 1400px;
   width: 100%;
   margin: 0 auto;
   padding: 2rem 1.5rem;
@@ -186,6 +186,72 @@ main {
 .error-message h2 {
   margin-bottom: 0.5rem;
   font-size: 1.1rem;
+}
+
+/* Ships table */
+
+#ships-container {
+  background-color: #132232;
+  border: 1px solid #1e3448;
+  border-radius: 8px;
+  padding: 2rem;
+}
+
+#ships-container h2 {
+  color: #c9a84c;
+  margin-bottom: 1.25rem;
+  font-size: 1.4rem;
+}
+
+.table-wrapper {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+  white-space: nowrap;
+}
+
+thead th {
+  background-color: #0a1520;
+  color: #c9a84c;
+  padding: 0.75rem 1rem;
+  text-align: left;
+  border-bottom: 2px solid #c9a84c;
+  font-weight: 600;
+}
+
+thead th.sortable {
+  cursor: pointer;
+  user-select: none;
+}
+
+thead th.sortable:hover {
+  color: #e0bf6a;
+}
+
+tbody tr {
+  border-bottom: 1px solid #1e3448;
+  transition: background-color 0.15s;
+}
+
+tbody tr:hover {
+  background-color: #1a2f45;
+}
+
+tbody td {
+  padding: 0.6rem 1rem;
+  color: #e0e6ed;
+}
+
+tbody td.placeholder {
+  color: #374e63;
+}
+
+tbody tr:last-child {
+  border-bottom: none;
 }
 
 /* Footer */

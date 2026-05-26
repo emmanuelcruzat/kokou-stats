@@ -18,6 +18,7 @@ app.get("/api", (req, res) => {
   res.send("kokou-stats API is running!");
 });
 
+//main player data
 app.get("/api/player/:username", async (req, res) => {
   const username = req.params.username;
   // basic route to obtain a user that we want to fetch stats for
@@ -31,6 +32,19 @@ app.get("/api/player/:username", async (req, res) => {
     `https://api.worldofwarships.com/wows/account/info/?application_id=${process.env.WOWS_API_KEY}&account_id=${accountId}`,
   );
   res.send(accountData.data);
+});
+
+app.get("/api/player/:username/ships", async (req, res) => {
+  const username = req.params.username;
+  const response = await axios.get(
+    `https://api.worldofwarships.com/wows/account/list/?application_id=${process.env.WOWS_API_KEY}&search=${username}`,
+  );
+
+  const accountId = response.data.data[0].account_id;
+  const shipData = await axios.get(
+    `https://api.worldofwarships.com/wows/ships/stats/?application_id=8bef8d52a6ece3ab64303f1564ac8468&account_id=${accountId}`,
+  );
+  res.send(shipData.data);
 });
 
 // temporary route to get a player's winrate
