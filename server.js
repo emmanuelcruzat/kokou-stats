@@ -4,11 +4,21 @@ const axios = require("axios");
 const app = express();
 const PORT = 3000;
 
-app.get("/", (req, res) => {
-  res.send("kokou-stats API is running");
+app.use(express.static("public"));
+
+// route to serve the player stats page
+app.get("/player/:username", async (req, res) => {
+  res.sendFile(__dirname + "/public/player.html");
 });
 
-app.get("/player/:username", async (req, res) => {
+// API ROUTES
+
+// basic route to check if the API is running
+app.get("/api", (req, res) => {
+  res.send("kokou-stats API is running!");
+});
+
+app.get("/api/player/:username", async (req, res) => {
   const username = req.params.username;
   // basic route to obtain a user that we want to fetch stats for
 
