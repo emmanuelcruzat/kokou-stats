@@ -17,6 +17,10 @@ app.get("/about", async (req, res) => {
 });
 
 // API ROUTES
+app.get("/api/myip", async (req, res) => {
+  const response = await axios.get("https://api.ipify.org?format=json");
+  res.json(response.data);
+});
 
 // basic route to check if the API is running
 app.get("/api", (req, res) => {
