@@ -17,6 +17,10 @@ app.get("/about", async (req, res) => {
 });
 
 // API ROUTES
+app.get("/api/myip", async (req, res) => {
+  const response = await axios.get("https://api.ipify.org?format=json");
+  res.json(response.data);
+});
 
 // basic route to check if the API is running
 app.get("/api", (req, res) => {
@@ -82,6 +86,29 @@ app.get("/api/player/:username/ships", async (req, res) => {
   }
 });
 
+// get the player's clan information
+app.get("/api/player/:username/clan", async (req, res) => {
+  try {
+    const username = req.params.username;
+    const searchRes = await axios.get(
+      `https://api.worldofwarships.com/wows/account/list/?application_id=${process.env.WOWS_API_KEY}&search=${username}`,
+    );
+
+    const accountId = searchRes.data.data[0].account_id;
+
+    console.log(accountId);
+
+    const clanRes = await axios.get(
+      `https://api.worldofwarships.com/wows/clans/accountinfo/?application_id=${process.env.WOWS_API_KEY}&account_id=${accountId}`,
+    );
+    res.send(clanRes.data);
+  } catch (err) {
+    console.error("Error fetching clan information:", err.message);
+    res.status(500).json({ error: "Failed to fetch clan information" });
+  }
+});
+
+//get expected values for a player from WoWS Numbers API
 app.get("/api/expected", async (req, res) => {
   try {
     const response = await axios.get(

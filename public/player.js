@@ -31,6 +31,7 @@ fetch(`/api/player/${username}`)
     statsContainer.innerHTML = `
       <div class="player-header">
         <h2>${accountData.nickname}</h2>
+        <div id="captain-title" class="captain-title placeholder">--</div>
         <div class="player-meta">
           <span>Last Battle: ${new Date(accountData.last_battle_time * 1000).toLocaleString()}</span>
           <span>Updated: ${new Date(accountData.stats_updated_at * 1000).toLocaleString()}</span>
@@ -88,6 +89,7 @@ fetch(`/api/player/${username}`)
         </div>
         <div class="stat-card stat-card-medals">
           <h3>Medals</h3>
+          <p class="wip-label">WORK IN PROGRESS</p>
         </div>
         <div class="stat-card">
           <h3>Damage</h3>
@@ -481,6 +483,43 @@ Promise.all([
       }
     });
 
+    const classLabelMap = {
+      Destroyer: "Destroyer",
+      Cruiser: "Cruiser",
+      Battleship: "Battleship",
+      "Aircraft Carrier": "Aircraft Carrier",
+      Submarine: "Submarine",
+    };
+    const totalClassBattles = Object.values(byClass).reduce((a, b) => a + b, 0);
+    const sortedClasses = Object.entries(byClass).sort(([, a], [, b]) => b - a);
+    const [topClass, topBattles] = sortedClasses[0] ?? [];
+    const significantClasses =
+      topClass && topBattles / totalClassBattles > 0.5
+        ? [topClass]
+        : sortedClasses
+            .filter(([, battles]) => battles / totalClassBattles >= 0.25)
+            .slice(0, 2)
+            .map(([cls]) => cls);
+    const shipTypeTitle =
+      significantClasses.length > 0
+        ? significantClasses.map((cls) => classLabelMap[cls] ?? cls).join(" & ") + " Main"
+        : "Universal Main";
+
+    const coalitionPrefixMap = { Allies: "Allied", Axis: "Axis", "Non-Aligned": "Non-Aligned" };
+    const totalCoalitionBattles = Object.values(byCoalition).reduce((a, b) => a + b, 0);
+    const [topCoalition, topCoalitionBattles] = Object.entries(byCoalition).sort(([, a], [, b]) => b - a)[0] ?? [];
+    const coalitionPrefix =
+      topCoalition && topCoalitionBattles / totalCoalitionBattles > 0.5
+        ? (coalitionPrefixMap[topCoalition] ?? topCoalition)
+        : "";
+
+    const captainTitle = coalitionPrefix ? `${coalitionPrefix} ${shipTypeTitle}` : shipTypeTitle;
+    const captainTitleEl = document.getElementById("captain-title");
+    if (captainTitleEl) {
+      captainTitleEl.textContent = captainTitle;
+      captainTitleEl.classList.remove("placeholder");
+    }
+
     //code for the charts, uses chart.js to display a doughnut chart of battles by class and nation
     const chartColors = [
       "#3498db",
@@ -497,6 +536,7 @@ Promise.all([
     ];
 
     function makeBarChart(id, labels, values) {
+      const total = values.reduce((a, b) => a + b, 0);
       new Chart(document.getElementById(id), {
         type: "bar",
         data: {
@@ -510,7 +550,17 @@ Promise.all([
           ],
         },
         options: {
-          plugins: { legend: { display: false } },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: (ctx) => {
+                  const pct = ((ctx.parsed.y / total) * 100).toFixed(1);
+                  return `${ctx.parsed.y.toLocaleString()} battles (${pct}%)`;
+                },
+              },
+            },
+          },
           scales: {
             x: { ticks: { color: "#e0e6ed" }, grid: { color: "#1e3448" } },
             y: { ticks: { color: "#e0e6ed" }, grid: { color: "#1e3448" } },
@@ -520,6 +570,7 @@ Promise.all([
     }
 
     function makeChart(id, labels, values) {
+      const total = values.reduce((a, b) => a + b, 0);
       return new Chart(document.getElementById(id), {
         type: "doughnut",
         data: {
@@ -539,6 +590,14 @@ Promise.all([
               position: "bottom",
               labels: { color: "#e0e6ed", font: { size: 12 }, padding: 12 },
             },
+            tooltip: {
+              callbacks: {
+                label: (ctx) => {
+                  const pct = ((ctx.parsed / total) * 100).toFixed(1);
+                  return `${ctx.label}: ${ctx.parsed.toLocaleString()} battles (${pct}%)`;
+                },
+              },
+            },
           },
         },
       });
@@ -555,12 +614,17 @@ Promise.all([
     const toggleCoalition = document.getElementById("toggle-coalition");
 
     function updateNationChart(labels, values) {
+      const total = values.reduce((a, b) => a + b, 0);
       nationChart.data.labels = labels;
       nationChart.data.datasets[0].data = values;
       nationChart.data.datasets[0].backgroundColor = chartColors.slice(
         0,
         labels.length,
       );
+      nationChart.options.plugins.tooltip.callbacks.label = (ctx) => {
+        const pct = ((ctx.parsed / total) * 100).toFixed(1);
+        return `${ctx.label}: ${ctx.parsed.toLocaleString()} battles (${pct}%)`;
+      };
       nationChart.update();
     }
 
@@ -576,11 +640,11 @@ Promise.all([
       toggleNation.classList.remove("active");
     });
 
-    const tierEntries = Object.entries(byTierNum).sort(([a], [b]) => a - b);
+    const allTiers = Array.from({ length: 11 }, (_, i) => i + 1);
     makeBarChart(
       "chart-tier",
-      tierEntries.map(([t]) => romanNumerals[t - 1] ?? t),
-      tierEntries.map(([, v]) => v),
+      allTiers.map((t) => romanNumerals[t - 1]),
+      allTiers.map((t) => byTierNum[t] ?? 0),
     );
 
     const pr = calculatePR(ships, expectedRes.data);
