@@ -171,6 +171,14 @@ main {
   margin-bottom: 0.5rem;
 }
 
+.captain-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #c9a84c;
+  letter-spacing: 0.04em;
+  margin-bottom: 0.5rem;
+}
+
 .player-meta {
   display: flex;
   gap: 2rem;
@@ -277,6 +285,15 @@ main {
 .stat-value {
   font-weight: 600;
   color: #e0e6ed;
+}
+
+.wip-label {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #546e7a;
+  letter-spacing: 0.1em;
+  text-align: center;
+  padding: 0.5rem 0;
 }
 
 /* Changelog */
