@@ -26,10 +26,11 @@ function tryClanRender() {
     <h3>Clan</h3>
     <div class="clan-row">
       ${clanItem("Name", `[${clan.tag}] ${clan.name}`)}
-      ${clanItem("Leader", `<a href="/player/${details.leader_name}" class="clan-leader-link">${details.leader_name}</a>`)}
-      ${clanItem("Members", clan.members_count)}
       ${clanItem("Role", roleLabel[role] ?? role)}
       ${clanItem("Joined", new Date(joined_at * 1000).toLocaleDateString())}
+      <div class="clan-divider"></div>
+      ${clanItem("Leader", `<a href="/player/${details.leader_name}" class="clan-leader-link">${details.leader_name}</a>`)}
+      ${clanItem("Members", clan.members_count)}
     </div>
   `;
 }

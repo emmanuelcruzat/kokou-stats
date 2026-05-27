@@ -189,6 +189,12 @@ main {
   gap: 2.5rem;
 }
 
+.clan-divider {
+  width: 1px;
+  background-color: #1e3448;
+  align-self: stretch;
+}
+
 .clan-item-label {
   font-size: 0.75rem;
   text-transform: uppercase;
@@ -241,6 +247,25 @@ main {
 .stat-card-medals {
   grid-column: 2 / 5;
   grid-row: 1;
+}
+
+.stat-card,
+.search,
+.player-header,
+.chart-card,
+#ships-container,
+.changelog {
+  transition: box-shadow 0.2s, border-color 0.2s;
+}
+
+.stat-card:hover,
+.search:hover,
+.player-header:hover,
+.chart-card:hover,
+#ships-container:hover,
+.changelog:hover {
+  box-shadow: 0 0 16px rgba(201, 168, 76, 0.15);
+  border-color: rgba(201, 168, 76, 0.3);
 }
 
 .stat-card {
