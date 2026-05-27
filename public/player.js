@@ -50,14 +50,13 @@ fetch(`/api/player/${username}`)
     document.getElementById;
 
     // display the player's stats on the page
-    const statsContainer = document.getElementById("stats-container");
     const accountData = data.data[Object.keys(data.data)[0]];
     const pvp = accountData.statistics.pvp;
     const winRate = (pvp.wins / pvp.battles) * 100;
 
     const currentWrColor = wrColor(winRate);
 
-    statsContainer.innerHTML = `
+    document.getElementById("player-header-container").innerHTML = `
       <div class="player-header">
         <h2><span id="clan-tag">${resolvedClanTag ? `[${resolvedClanTag}]` : ""}</span>${accountData.nickname}</h2>
         <div id="captain-title" class="captain-title placeholder">--</div>
