@@ -2,6 +2,38 @@
 const username = window.location.pathname.split("/")[2];
 console.log(username);
 
+const row = (label, value) =>
+  `<div class="stat-row"><span class="stat-label">${label}</span><span class="stat-value">${value}</span></div>`;
+
+let resolvedClanTag = null;
+let clanPayload = null;
+
+function applyClanTag(tag) {
+  resolvedClanTag = tag;
+  const el = document.getElementById("clan-tag");
+  if (el) el.textContent = `[${tag}]`;
+}
+
+const clanItem = (label, value) =>
+  `<div class="clan-item"><div class="clan-item-label">${label}</div><div class="clan-item-value">${value}</div></div>`;
+
+function tryClanRender() {
+  const clanCard = document.getElementById("clan-card");
+  if (!clanCard || !clanPayload) return;
+  const { clan, details, role, joined_at } = clanPayload;
+  clanCard.style.display = "";
+  clanCard.innerHTML = `
+    <h3>Clan</h3>
+    <div class="clan-row">
+      ${clanItem("Name", `[${clan.tag}] ${clan.name}`)}
+      ${clanItem("Leader", `<a href="/player/${details.leader_name}" class="clan-leader-link">${details.leader_name}</a>`)}
+      ${clanItem("Members", clan.members_count)}
+      ${clanItem("Role", roleLabel[role] ?? role)}
+      ${clanItem("Joined", new Date(joined_at * 1000).toLocaleDateString())}
+    </div>
+  `;
+}
+
 // for the search bar
 document.getElementById("view-stats").addEventListener("click", (event) => {
   // prevent the default form submission behavior
@@ -25,18 +57,18 @@ fetch(`/api/player/${username}`)
 
     const currentWrColor = wrColor(winRate);
 
-    const row = (label, value) =>
-      `<div class="stat-row"><span class="stat-label">${label}</span><span class="stat-value">${value}</span></div>`;
-
     statsContainer.innerHTML = `
       <div class="player-header">
-        <h2>${accountData.nickname}</h2>
+        <h2><span id="clan-tag">${resolvedClanTag ? `[${resolvedClanTag}]` : ""}</span>${accountData.nickname}</h2>
         <div id="captain-title" class="captain-title placeholder">--</div>
         <div class="player-meta">
           <span>Last Battle: ${new Date(accountData.last_battle_time * 1000).toLocaleString()}</span>
           <span>Updated: ${new Date(accountData.stats_updated_at * 1000).toLocaleString()}</span>
         </div>
       </div>
+    `;
+
+    document.getElementById("stat-grid-container").innerHTML = `
       <div class="stat-grid">
         <div class="stat-card stat-card-battle">
           <h3>Battle Record</h3>
@@ -111,6 +143,7 @@ fetch(`/api/player/${username}`)
         </div>
       </div>
     `;
+    tryClanRender();
   })
   .catch((error) => {
     console.error("Error fetching player stats:", error);
@@ -449,6 +482,7 @@ function renderShipsTable(ships, sortCol, sortAsc) {
   `;
 }
 
+
 Promise.all([
   fetch(`/api/player/${username}/ships`).then((r) => r.json()),
   fetch(`/api/expected`).then((r) => r.json()),
@@ -680,3 +714,30 @@ Promise.all([
     document.getElementById("ships-container").innerHTML =
       `<p>Error fetching ship stats. Please try again later.</p>`;
   });
+
+const roleLabel = {
+  commander: "Commander",
+  executive_officer: "Executive Officer",
+  recruitment_officer: "Recruitment Officer",
+  officer: "Officer",
+  private: "Recruit",
+};
+
+fetch(`/api/player/${username}/clan`)
+  .then((r) => r.json())
+  .then(async (clanAccountRes) => {
+    const accountId = Object.keys(clanAccountRes.data)[0];
+    const membership = clanAccountRes.data[accountId];
+    if (!membership) return;
+
+    const { clan_id, joined_at, role, clan } = membership;
+
+    const clanRes = await fetch(`/api/clan/${clan_id}`);
+    const clanData = await clanRes.json();
+    const details = clanData.data[clan_id];
+
+    applyClanTag(clan.tag);
+    clanPayload = { clan, details, role, joined_at };
+    tryClanRender();
+  })
+  .catch((err) => console.error("Error fetching clan data:", err));

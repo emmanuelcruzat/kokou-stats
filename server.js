@@ -99,7 +99,21 @@ app.get("/api/player/:username/clan", async (req, res) => {
     console.log(accountId);
 
     const clanRes = await axios.get(
-      `https://api.worldofwarships.com/wows/clans/accountinfo/?application_id=${process.env.WOWS_API_KEY}&account_id=${accountId}`,
+      `https://api.worldofwarships.com/wows/clans/accountinfo/?application_id=${process.env.WOWS_API_KEY}&account_id=${accountId}&extra=clan`,
+    );
+    res.send(clanRes.data);
+  } catch (err) {
+    console.error("Error fetching clan information:", err.message);
+    res.status(500).json({ error: "Failed to fetch clan information" });
+  }
+});
+
+// look up clan information by clan ID
+app.get("/api/clan/:clanId", async (req, res) => {
+  try {
+    const clanId = req.params.clanId;
+    const clanRes = await axios.get(
+      `https://api.worldofwarships.com/wows/clans/info/?application_id=${process.env.WOWS_API_KEY}&clan_id=${clanId}`,
     );
     res.send(clanRes.data);
   } catch (err) {

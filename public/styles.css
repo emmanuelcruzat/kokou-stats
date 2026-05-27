@@ -171,6 +171,47 @@ main {
   margin-bottom: 0.5rem;
 }
 
+
+#clan-tag {
+  color: #4fc3f7;
+  font-weight: 700;
+  margin-right: 0.3em;
+}
+
+.header-row {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.clan-row {
+  display: flex;
+  gap: 2.5rem;
+}
+
+.clan-item-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #546e7a;
+  margin-bottom: 0.2rem;
+}
+
+.clan-item-value {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #e0e6ed;
+}
+
+.clan-leader-link {
+  color: #e0e6ed;
+  transition: color 0.15s;
+}
+
+.clan-leader-link:hover {
+  color: #c9a84c;
+}
+
 .captain-title {
   font-size: 1.1rem;
   font-weight: 600;

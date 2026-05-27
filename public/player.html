@@ -34,10 +34,14 @@
           <button type="submit" id="view-stats">View Stats</button>
         </form>
       </section>
-      <section id="stats-container">
-        <h2>Player Stats</h2>
-        <p>Loading player stats...</p>
-      </section>
+      <div class="header-row">
+        <section id="stats-container">
+          <h2>Player Stats</h2>
+          <p>Loading player stats...</p>
+        </section>
+        <div id="clan-card" class="stat-card" style="display:none"></div>
+      </div>
+      <div id="stat-grid-container"></div>
       <section class="error-message" style="display: none">
         <h2>Error</h2>
         <p>Unable to load player statistics. Please try again later.</p>
