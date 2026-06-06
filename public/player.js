@@ -483,9 +483,11 @@ function renderShipsTable(ships, sortCol, sortAsc) {
 }
 
 
-fetch(`/api/player/${username}/ships`)
-  .then((r) => r.json())
-  .then((data) => {
+Promise.all([
+  fetch(`/api/player/${username}/ships`).then((r) => r.json()),
+  fetch(`/api/expected`).then((r) => r.json()),
+])
+  .then(([data, expectedRes]) => {
     const shipsContainer = document.getElementById("ships-container");
     const ships = data.data[Object.keys(data.data)[0]];
 
@@ -679,25 +681,20 @@ fetch(`/api/player/${username}/ships`)
       allTiers.map((t) => byTierNum[t] ?? 0),
     );
 
-    shipsContainer.innerHTML = renderShipsTable(ships, sortCol, sortAsc);
+    const pr = calculatePR(ships, expectedRes.data);
+    if (pr !== null) {
+      const nextPR = prNextTier(pr);
+      document.getElementById("pr-display").style.color = prColor(pr);
+      document.getElementById("pr-num").textContent = pr.toLocaleString();
+      document.getElementById("pr-tier").textContent = prLabel(pr);
+      const prNextEl = document.getElementById("pr-next");
+      if (nextPR) {
+        prNextEl.textContent = `+${nextPR.needed} to ${nextPR.label}`;
+        prNextEl.style.color = prColor(pr + nextPR.needed);
+      }
+    }
 
-    fetch(`/api/expected`)
-      .then((r) => r.ok ? r.json() : null)
-      .catch(() => null)
-      .then((expectedRes) => {
-        const pr = expectedRes ? calculatePR(ships, expectedRes.data) : null;
-        if (pr !== null) {
-          const nextPR = prNextTier(pr);
-          document.getElementById("pr-display").style.color = prColor(pr);
-          document.getElementById("pr-num").textContent = pr.toLocaleString();
-          document.getElementById("pr-tier").textContent = prLabel(pr);
-          const prNextEl = document.getElementById("pr-next");
-          if (nextPR) {
-            prNextEl.textContent = `+${nextPR.needed} to ${nextPR.label}`;
-            prNextEl.style.color = prColor(pr + nextPR.needed);
-          }
-        }
-      });
+    shipsContainer.innerHTML = renderShipsTable(ships, sortCol, sortAsc);
 
     shipsContainer.addEventListener("click", (e) => {
       const th = e.target.closest("th[data-col]");
