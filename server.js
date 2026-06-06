@@ -46,6 +46,7 @@ app.get("/api/player/:username", async (req, res) => {
     res.send(accountData.data);
   } catch (err) {
     console.error("Error fetching player stats:", err.message);
+    console.error("Full error:", err.stack);
     res.status(500).json({ error: "Failed to fetch player stats" });
   }
 });
@@ -89,6 +90,7 @@ app.get("/api/player/:username/ships", async (req, res) => {
     res.send({ ...shipStatsRes.data, data: { [accountId]: enrichedShips } });
   } catch (err) {
     console.error("Error fetching ship stats:", err.message);
+    console.error("Full error:", err.stack);
     res.status(500).json({ error: "Failed to fetch ship stats" });
   }
 });
@@ -111,6 +113,7 @@ app.get("/api/player/:username/clan", async (req, res) => {
     res.send(clanRes.data);
   } catch (err) {
     console.error("Error fetching clan information:", err.message);
+    console.error("Full error:", err.stack);
     res.status(500).json({ error: "Failed to fetch clan information" });
   }
 });
