@@ -38,15 +38,17 @@ app.get("/api/player/:username", async (req, res) => {
     const response = await axios.get(
       `https://api.worldofwarships.com/wows/account/list/?application_id=${process.env.WOWS_API_KEY}&search=${username}`,
     );
-
+    console.log("Search response:", JSON.stringify(response.data));
     const accountId = response.data.data[0].account_id;
     const accountData = await axios.get(
       `https://api.worldofwarships.com/wows/account/info/?application_id=${process.env.WOWS_API_KEY}&account_id=${accountId}`,
     );
+    console.log("Account data:", JSON.stringify(accountData.data));
     res.json(accountData.data);
   } catch (err) {
     console.error("Error fetching player stats:", err.message);
-    console.error("Full error:", err.stack);
+    console.error("Stack:", err.stack);
+    if (err.response) console.error("Wargaming response:", JSON.stringify(err.response.data));
     res.status(500).json({ error: "Failed to fetch player stats" });
   }
 });
