@@ -43,7 +43,7 @@ app.get("/api/player/:username", async (req, res) => {
     const accountData = await axios.get(
       `https://api.worldofwarships.com/wows/account/info/?application_id=${process.env.WOWS_API_KEY}&account_id=${accountId}`,
     );
-    res.send(accountData.data);
+    res.json(accountData.data);
   } catch (err) {
     console.error("Error fetching player stats:", err.message);
     console.error("Full error:", err.stack);
@@ -87,7 +87,7 @@ app.get("/api/player/:username/ships", async (req, res) => {
       nation: encyclopedia[ship.ship_id]?.nation ?? null,
     }));
 
-    res.send({ ...shipStatsRes.data, data: { [accountId]: enrichedShips } });
+    res.json({ ...shipStatsRes.data, data: { [accountId]: enrichedShips } });
   } catch (err) {
     console.error("Error fetching ship stats:", err.message);
     console.error("Full error:", err.stack);
@@ -110,7 +110,7 @@ app.get("/api/player/:username/clan", async (req, res) => {
     const clanRes = await axios.get(
       `https://api.worldofwarships.com/wows/clans/accountinfo/?application_id=${process.env.WOWS_API_KEY}&account_id=${accountId}&extra=clan`,
     );
-    res.send(clanRes.data);
+    res.json(clanRes.data);
   } catch (err) {
     console.error("Error fetching clan information:", err.message);
     console.error("Full error:", err.stack);
@@ -125,7 +125,7 @@ app.get("/api/clan/:clanId", async (req, res) => {
     const clanRes = await axios.get(
       `https://api.worldofwarships.com/wows/clans/info/?application_id=${process.env.WOWS_API_KEY}&clan_id=${clanId}`,
     );
-    res.send(clanRes.data);
+    res.json(clanRes.data);
   } catch (err) {
     console.error("Error fetching clan information:", err.message);
     res.status(500).json({ error: "Failed to fetch clan information" });
