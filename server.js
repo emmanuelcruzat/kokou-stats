@@ -5,6 +5,10 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(express.static("public"));
+app.use("/api", (req, res, next) => {
+  res.set("Cache-Control", "no-store");
+  next();
+});
 
 // route to serve the player stats page
 app.get("/player/:username", async (req, res) => {
@@ -59,6 +63,9 @@ app.get("/api/player/:username/ships", async (req, res) => {
     );
 
     const ships = shipStatsRes.data.data[accountId];
+    if (!ships) {
+      return res.status(403).json({ error: "Player statistics are hidden" });
+    }
     const shipIds = ships.map((s) => s.ship_id);
 
     // encyclopedia API accepts at most 100 ship IDs per request
