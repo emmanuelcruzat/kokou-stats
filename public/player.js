@@ -256,6 +256,28 @@ const nationCoalition = {
   pan_asia: "Non-Aligned",
 };
 
+const coalitionColors = {
+  Allies: "#3498db",
+  Axis: "#e74c3c",
+  "Non-Aligned": "#c9a84c",
+};
+
+const nationColors = {
+  "United States": "#3498db",
+  "United Kingdom": "#e74c3c",
+  France: "#5dade2",
+  "British Commonwealth": "#9b59b6",
+  Netherlands: "#e67e22",
+  "Soviet Union": "#c0392b",
+  "Pan-America": "#1abc9c",
+  "German Reich": "#95a5a6",
+  "Empire of Japan": "#e91e63",
+  "Kingdom of Italy": "#2ecc71",
+  "Spanish State": "#f39c12",
+  "Pan-Europe": "#34495e",
+  "Pan-Asia": "#f1c40f",
+};
+
 const romanNumerals = [
   "I",
   "II",
@@ -595,6 +617,8 @@ fetch(`/api/player/${username}/ships`)
       "#ff5722",
     ];
 
+    const barChartColor = "#3498db";
+
     function makeBarChart(id, labels, values) {
       const total = values.reduce((a, b) => a + b, 0);
       new Chart(document.getElementById(id), {
@@ -604,7 +628,7 @@ fetch(`/api/player/${username}/ships`)
           datasets: [
             {
               data: values,
-              backgroundColor: chartColors.slice(0, labels.length),
+              backgroundColor: barChartColor,
               borderWidth: 0,
             },
           ],
@@ -629,7 +653,7 @@ fetch(`/api/player/${username}/ships`)
       });
     }
 
-    function makeChart(id, labels, values) {
+    function makeChart(id, labels, values, colors) {
       const total = values.reduce((a, b) => a + b, 0);
       return new Chart(document.getElementById(id), {
         type: "doughnut",
@@ -638,7 +662,7 @@ fetch(`/api/player/${username}/ships`)
           datasets: [
             {
               data: values,
-              backgroundColor: chartColors.slice(0, labels.length),
+              backgroundColor: colors ?? chartColors.slice(0, labels.length),
               borderColor: "#132232",
               borderWidth: 2,
             },
@@ -664,23 +688,23 @@ fetch(`/api/player/${username}/ships`)
     }
 
     makeChart("chart-class", Object.keys(byClass), Object.values(byClass));
+    const nationLabels = Object.keys(byNation);
     const nationChart = makeChart(
       "chart-nation",
-      Object.keys(byNation),
+      nationLabels,
       Object.values(byNation),
+      nationLabels.map((label) => nationColors[label] ?? "#546e7a"),
     );
 
     const toggleNation = document.getElementById("toggle-nation");
     const toggleCoalition = document.getElementById("toggle-coalition");
 
-    function updateNationChart(labels, values) {
+    function updateNationChart(labels, values, colors) {
       const total = values.reduce((a, b) => a + b, 0);
       nationChart.data.labels = labels;
       nationChart.data.datasets[0].data = values;
-      nationChart.data.datasets[0].backgroundColor = chartColors.slice(
-        0,
-        labels.length,
-      );
+      nationChart.data.datasets[0].backgroundColor =
+        colors ?? chartColors.slice(0, labels.length);
       nationChart.options.plugins.tooltip.callbacks.label = (ctx) => {
         const pct = ((ctx.parsed / total) * 100).toFixed(1);
         return `${ctx.label}: ${ctx.parsed.toLocaleString()} battles (${pct}%)`;
@@ -689,13 +713,23 @@ fetch(`/api/player/${username}/ships`)
     }
 
     toggleNation.addEventListener("click", () => {
-      updateNationChart(Object.keys(byNation), Object.values(byNation));
+      const labels = Object.keys(byNation);
+      updateNationChart(
+        labels,
+        Object.values(byNation),
+        labels.map((label) => nationColors[label] ?? "#546e7a"),
+      );
       toggleNation.classList.add("active");
       toggleCoalition.classList.remove("active");
     });
 
     toggleCoalition.addEventListener("click", () => {
-      updateNationChart(Object.keys(byCoalition), Object.values(byCoalition));
+      const coalitionLabels = Object.keys(byCoalition);
+      updateNationChart(
+        coalitionLabels,
+        Object.values(byCoalition),
+        coalitionLabels.map((label) => coalitionColors[label] ?? "#546e7a"),
+      );
       toggleCoalition.classList.add("active");
       toggleNation.classList.remove("active");
     });
