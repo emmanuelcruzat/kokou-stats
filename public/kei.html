@@ -42,11 +42,36 @@
 
     <main>
       <section class="about">
-        <h2>About Kokou Stats</h2>
+        <h2>Kokou's Effectiveness Index (KEI)</h2>
         <p>
-          Welcome to Kokou Stats! This is a simple stats tracking application
-          for World of Warships.
+          KEI is a custom rating metric created for KokouStats. It blends a
+          player's win rate with their average spotting damage per battle into a
+          single number, rewarding players who both win games and provide useful
+          information to their team.
         </p>
+        <p>
+          The intention is to create a formula to measure player effectiveness
+          WITHOUT using damage.
+        </p>
+        <p>
+          <strong>Formula:</strong> KEI = (Average Spotting Damage ÷ 1000) + Win
+          Rate%
+        </p>
+        <p>
+          For example, a player with a 55% win rate and 25,000 average spotting
+          damage per battle would have a KEI of 25 + 55 = 80.
+        </p>
+        <h3 style="margin-top: 1.5rem; color: #c9a84c">Rating Tiers</h3>
+        <ul style="margin-top: 0.75rem; line-height: 1.8">
+          <li>Below 50: Bad</li>
+          <li>50 - 57: Below Average</li>
+          <li>58 - 62: Average</li>
+          <li>63 - 67: Good</li>
+          <li>68 - 72: Very Good</li>
+          <li>73 - 79: Great</li>
+          <li>80 - 89: Unicum</li>
+          <li>90+: Super Unicum</li>
+        </ul>
       </section>
     </main>
 

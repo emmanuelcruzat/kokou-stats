@@ -21,6 +21,7 @@ body > * {
 /* Header */
 
 header {
+  position: relative;
   background-color: #0a1520;
   padding: 1rem 2rem;
   display: flex;
@@ -43,6 +44,11 @@ header h1 a:hover {
   color: #e0bf6a;
 }
 
+nav {
+  display: flex;
+  align-items: center;
+}
+
 nav ul {
   list-style: none;
   display: flex;
@@ -58,6 +64,47 @@ nav a {
 
 nav a:hover {
   color: #c9a84c;
+}
+
+.nav-search {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  gap: 0.5rem;
+}
+
+.nav-search input {
+  width: 380px;
+  padding: 0.4rem 0.75rem;
+  background-color: #0d1b2a;
+  border: 1px solid #1e3448;
+  border-radius: 5px;
+  color: #e0e6ed;
+  font-size: 0.85rem;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.nav-search input:focus {
+  border-color: #c9a84c;
+}
+
+.nav-search button {
+  padding: 0.4rem 0.9rem;
+  background-color: #c9a84c;
+  color: #0a1520;
+  border: none;
+  border-radius: 5px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.nav-search button:hover {
+  background-color: #e0bf6a;
 }
 
 /* Main */
@@ -376,6 +423,28 @@ main {
   font-size: 0.85rem;
   color: #90a4ae;
   margin-bottom: 0.4rem;
+}
+
+.info-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.1em;
+  height: 1.1em;
+  margin-left: 0.4em;
+  border: 1px solid #546e7a;
+  border-radius: 50%;
+  font-size: 0.7em;
+  line-height: 1;
+  font-weight: 700;
+  color: #546e7a;
+  text-decoration: none;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.info-link:hover {
+  color: #c9a84c;
+  border-color: #c9a84c;
 }
 
 .stat-value {

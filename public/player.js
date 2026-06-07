@@ -127,7 +127,7 @@ function renderStatGrid() {
           if (pr === null) {
             return `
               <div class="winrate-display" style="color:#546e7a">
-                <div class="metric-label">WoWS Numbers Personal Rating (PR)</div>
+                <div class="metric-label">WoWS Numbers Personal Rating (PR) <a href="https://na.wows-numbers.com/personal/rating" target="_blank" class="info-link">?</a></div>
                 <div class="winrate-top">
                   <div class="metric-pct">—</div>
                   <div class="winrate-label"></div>
@@ -141,7 +141,7 @@ function renderStatGrid() {
             : "";
           return `
             <div class="winrate-display" style="color:${prColor(pr)}">
-              <div class="metric-label">WoWS Numbers Personal Rating (PR)</div>
+              <div class="metric-label">WoWS Numbers Personal Rating (PR) <a href="https://na.wows-numbers.com/personal/rating" target="_blank" class="info-link">?</a></div>
               <div class="winrate-top">
                 <div class="metric-pct">${pr.toLocaleString()}</div>
                 <div class="winrate-label">${prLabel(pr)}</div>
@@ -158,7 +158,7 @@ function renderStatGrid() {
             : "";
           return `
             <div class="winrate-display" style="color:${keiColor(kei)}">
-              <div class="metric-label">Kokou's Effectiveness Index (KEI)</div>
+              <div class="metric-label">Kokou's Effectiveness Index (KEI) <a href="/kei" target="_blank" class="info-link">?</a></div>
               <div class="winrate-top">
                 <div class="metric-pct">${kei.toFixed(2)}</div>
                 <div class="winrate-label">${keiLabel(kei)}</div>
@@ -216,14 +216,6 @@ function tryClanRender() {
     </div>
   `;
 }
-
-// for the search bar
-document.getElementById("view-stats").addEventListener("click", (event) => {
-  // prevent the default form submission behavior
-  event.preventDefault();
-  const username = document.getElementById("username").value;
-  window.location.href = `/player/${username}`;
-});
 
 // battle type rack: switches the Battle Record stats (and PR) between
 // Random Battles, Solo, Duo Division, and Trio Division
