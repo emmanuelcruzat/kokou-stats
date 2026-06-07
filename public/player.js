@@ -17,14 +17,31 @@ function applyClanTag(tag) {
 const clanItem = (label, value) =>
   `<div class="clan-item"><div class="clan-item-label">${label}</div><div class="clan-item-value">${value}</div></div>`;
 
-let playerStatsData = null;
+let accountData = null;
+let accountId = null;
 let captainTitle = null;
-let pr = null;
-let prReady = false;
+let expectedData = null;
+let initialPrReady = false;
+let currentMode = "pvp";
+const modeCache = {};
+
+// maps each battle-type button to the account-info field and ships endpoint needed to load it
+const battleModeConfig = {
+  pvp: { statsField: "pvp", endpoint: null, shipsExtra: null },
+  solo: { statsField: "pvp_solo", endpoint: "solo", shipsExtra: "pvp_solo" },
+  div2: { statsField: "pvp_div2", endpoint: "div2", shipsExtra: "pvp_div2" },
+  div3: { statsField: "pvp_div3", endpoint: "div3", shipsExtra: "pvp_div3" },
+};
+
+const battleModeLabels = {
+  pvp: "Random Battles",
+  solo: "Solo",
+  div2: "Duo Division",
+  div3: "Trio Division",
+};
 
 function tryRenderPlayerDetails() {
-  if (!playerStatsData || captainTitle === null || !prReady) return;
-  const { accountData, pvp, winRate, currentWrColor } = playerStatsData;
+  if (!accountData || captainTitle === null || !initialPrReady) return;
 
   document.getElementById("player-header-container").innerHTML = `
     <div class="player-header">
@@ -37,7 +54,42 @@ function tryRenderPlayerDetails() {
     </div>
   `;
 
-  document.getElementById("stat-grid-container").innerHTML = `
+  renderStatGrid();
+}
+
+// fetches and caches the account + ship stats needed to display a given battle type
+async function loadMode(mode) {
+  if (modeCache[mode]) return modeCache[mode];
+
+  const config = battleModeConfig[mode];
+  const [accountRes, shipsRes] = await Promise.all([
+    fetch(`/api/player/${username}/${config.endpoint}`).then((r) => r.json()),
+    fetch(`/api/player/${username}/ships?extra=${config.shipsExtra}`).then((r) => r.json()),
+  ]);
+
+  const pvp = accountRes.data[accountId].statistics[config.statsField];
+  const winRate = (pvp.wins / pvp.battles) * 100;
+  const currentWrColor = wrColor(winRate);
+  const modeShips = shipsRes.data[accountId];
+  const pr = expectedData ? calculatePR(modeShips, expectedData, config.statsField) : null;
+
+  const entry = { pvp, winRate, currentWrColor, pr };
+  modeCache[mode] = entry;
+  return entry;
+}
+
+function renderStatGrid() {
+  const container = document.getElementById("stat-grid-container");
+  const entry = modeCache[currentMode];
+
+  if (!entry) {
+    container.innerHTML = `<div class="loading"><div class="spinner"></div><p>Loading stats...</p></div>`;
+    return;
+  }
+
+  const { pvp, winRate, currentWrColor, pr } = entry;
+
+  container.innerHTML = `
     <div class="stat-grid">
       <div class="stat-card stat-card-battle">
         <h3>Battle Record</h3>
@@ -48,7 +100,7 @@ function tryRenderPlayerDetails() {
             : "";
           return `
             <div class="winrate-display" style="color:${currentWrColor}">
-              <div class="metric-label">Random Battles Winrate</div>
+              <div class="metric-label">${battleModeLabels[currentMode]} Winrate</div>
               <div class="winrate-top">
                 <div class="winrate-pct">${winRate.toFixed(2)}%</div>
                 <div class="winrate-label">${wrLabel(winRate)}</div>
@@ -159,6 +211,34 @@ document.getElementById("view-stats").addEventListener("click", (event) => {
   window.location.href = `/player/${username}`;
 });
 
+// battle type rack: switches the Battle Record stats (and PR) between
+// Random Battles, Solo, Duo Division, and Trio Division
+const battleTypeButtons = document.querySelectorAll(".battle-type-btn");
+battleTypeButtons.forEach((btn) => {
+  btn.addEventListener("click", async () => {
+    const mode = btn.dataset.mode;
+    if (!accountId || mode === currentMode) return;
+
+    battleTypeButtons.forEach((b) => b.classList.remove("active"));
+    btn.classList.add("active");
+    currentMode = mode;
+    renderStatGrid();
+
+    if (modeCache[mode]) return;
+
+    try {
+      await loadMode(mode);
+      if (currentMode === mode) renderStatGrid();
+    } catch (err) {
+      console.error("Error loading battle type stats:", err);
+      if (currentMode === mode) {
+        document.getElementById("stat-grid-container").innerHTML =
+          `<p>Error loading stats. Please try again later.</p>`;
+      }
+    }
+  });
+});
+
 // fetch the player's main stats from the server
 fetch(`/api/player/${username}`)
   .then((response) => response.json())
@@ -167,13 +247,13 @@ fetch(`/api/player/${username}`)
     document.getElementById;
 
     // display the player's stats on the page
-    const accountData = data.data[Object.keys(data.data)[0]];
+    accountId = Object.keys(data.data)[0];
+    accountData = data.data[accountId];
     const pvp = accountData.statistics.pvp;
     const winRate = (pvp.wins / pvp.battles) * 100;
-
     const currentWrColor = wrColor(winRate);
 
-    playerStatsData = { accountData, pvp, winRate, currentWrColor };
+    modeCache.pvp = { pvp, winRate, currentWrColor, pr: null };
     tryRenderPlayerDetails();
     tryClanRender();
   })
@@ -448,7 +528,7 @@ function prColor(pr) {
                 : "#e74c3c";
 }
 
-function calculatePR(ships, expectedData) {
+function calculatePR(ships, expectedData, pvpKey = "pvp") {
   let actualDmg = 0,
     actualFrags = 0,
     actualWins = 0;
@@ -457,7 +537,7 @@ function calculatePR(ships, expectedData) {
     expectedWins = 0;
 
   ships.forEach((ship) => {
-    const pvp = ship.pvp;
+    const pvp = ship[pvpKey];
     if (!pvp || pvp.battles === 0) return;
     const exp = expectedData[ship.ship_id];
     if (!exp) return;
@@ -747,8 +827,11 @@ fetch(`/api/player/${username}/ships`)
       .then((r) => r.ok ? r.json() : null)
       .catch(() => null)
       .then((expectedRes) => {
-        pr = expectedRes ? calculatePR(ships, expectedRes.data) : null;
-        prReady = true;
+        expectedData = expectedRes ? expectedRes.data : null;
+        if (modeCache.pvp) {
+          modeCache.pvp.pr = expectedData ? calculatePR(ships, expectedData, "pvp") : null;
+        }
+        initialPrReady = true;
         tryRenderPlayerDetails();
       });
 
