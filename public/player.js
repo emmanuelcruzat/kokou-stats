@@ -17,6 +17,188 @@ function applyClanTag(tag) {
 const clanItem = (label, value) =>
   `<div class="clan-item"><div class="clan-item-label">${label}</div><div class="clan-item-value">${value}</div></div>`;
 
+let accountData = null;
+let accountId = null;
+let captainTitle = null;
+let expectedData = null;
+let initialPrReady = false;
+let currentMode = "pvp";
+const modeCache = {};
+
+// shared state for the ships table + charts so they can be re-rendered per battle-type mode
+let sortCol = "battles";
+let sortAsc = false;
+let nationView = "nation";
+let classChart = null;
+let nationChart = null;
+let tierChart = null;
+let currentByNation = {};
+let currentByCoalition = {};
+
+// maps each battle-type button to the account-info field and ships endpoint needed to load it
+const battleModeConfig = {
+  pvp: { statsField: "pvp", endpoint: null, shipsExtra: null },
+  solo: { statsField: "pvp_solo", endpoint: "solo", shipsExtra: "pvp_solo" },
+  div2: { statsField: "pvp_div2", endpoint: "div2", shipsExtra: "pvp_div2" },
+  div3: { statsField: "pvp_div3", endpoint: "div3", shipsExtra: "pvp_div3" },
+  rank: { statsField: "rank_solo", endpoint: "rank", shipsExtra: "rank_solo" },
+  coop: { statsField: "pve", endpoint: "coop", shipsExtra: "pve" },
+};
+
+const battleModeLabels = {
+  pvp: "Random Battles",
+  solo: "Solo",
+  div2: "Double Division",
+  div3: "Triple Division",
+  rank: "Ranked Battles",
+  coop: "Co-Op Battles",
+};
+
+function tryRenderPlayerDetails() {
+  if (!accountData || captainTitle === null || !initialPrReady) return;
+
+  document.getElementById("player-header-container").innerHTML = `
+    <div class="player-header">
+      <h2><span id="clan-tag">${resolvedClanTag ? `[${resolvedClanTag}]` : ""}</span>${accountData.nickname}</h2>
+      <div id="captain-title" class="captain-title">${captainTitle}</div>
+      <div class="player-meta">
+        <span>Last Battle: ${new Date(accountData.last_battle_time * 1000).toLocaleString()}</span>
+        <span>Updated: ${new Date(accountData.stats_updated_at * 1000).toLocaleString()}</span>
+      </div>
+    </div>
+  `;
+
+  renderStatGrid();
+}
+
+// fetches and caches the account + ship stats needed to display a given battle type
+async function loadMode(mode) {
+  if (modeCache[mode]) return modeCache[mode];
+
+  const config = battleModeConfig[mode];
+  const [accountRes, shipsRes] = await Promise.all([
+    fetch(`/api/player/${username}/${config.endpoint}`).then((r) => r.json()),
+    fetch(`/api/player/${username}/ships?extra=${config.shipsExtra}`).then((r) => r.json()),
+  ]);
+
+  const pvp = accountRes.data[accountId].statistics[config.statsField];
+  const winRate = (pvp.wins / pvp.battles) * 100;
+  const currentWrColor = wrColor(winRate);
+  const modeShips = shipsRes.data[accountId];
+  const pr = expectedData ? calculatePR(modeShips, expectedData, config.statsField) : null;
+
+  const entry = { pvp, winRate, currentWrColor, pr, ships: modeShips };
+  modeCache[mode] = entry;
+  return entry;
+}
+
+function renderStatGrid() {
+  const container = document.getElementById("stat-grid-container");
+  const entry = modeCache[currentMode];
+
+  if (!entry) {
+    container.innerHTML = `<div class="loading"><div class="spinner"></div><p>Loading stats...</p></div>`;
+    return;
+  }
+
+  const { pvp, winRate, currentWrColor, pr } = entry;
+
+  container.innerHTML = `
+    <div class="stat-grid">
+      <div class="stat-card stat-card-battle">
+        <h3>Battle Record</h3>
+        ${(() => {
+          const next = wrNextTier(winRate);
+          const nextText = next
+            ? `<div class="winrate-next" style="color:${wrColor(parseFloat(winRate) + parseFloat(next.needed))}">+${next.needed}% to ${next.label}</div>`
+            : "";
+          return `
+            <div class="winrate-display" style="color:${currentWrColor}">
+              <div class="metric-label">${battleModeLabels[currentMode]} Winrate</div>
+              <div class="winrate-top">
+                <div class="winrate-pct">${winRate.toFixed(2)}%</div>
+                <div class="winrate-label">${wrLabel(winRate)}</div>
+              </div>
+              ${nextText}
+            </div>
+          `;
+        })()}
+        ${(() => {
+          if (pr === null) {
+            return `
+              <div class="winrate-display" style="color:#546e7a">
+                <div class="metric-label">WoWS Numbers Personal Rating (PR) <a href="https://na.wows-numbers.com/personal/rating" target="_blank" class="info-link">?</a></div>
+                <div class="winrate-top">
+                  <div class="metric-pct">—</div>
+                  <div class="winrate-label"></div>
+                </div>
+              </div>
+            `;
+          }
+          const nextPR = prNextTier(pr);
+          const nextText = nextPR
+            ? `<div class="winrate-next" style="color:${prColor(pr + nextPR.needed)}">+${nextPR.needed} to ${nextPR.label}</div>`
+            : "";
+          return `
+            <div class="winrate-display" style="color:${prColor(pr)}">
+              <div class="metric-label">WoWS Numbers Personal Rating (PR) <a href="https://na.wows-numbers.com/personal/rating" target="_blank" class="info-link">?</a></div>
+              <div class="winrate-top">
+                <div class="metric-pct">${pr.toLocaleString()}</div>
+                <div class="winrate-label">${prLabel(pr)}</div>
+              </div>
+              ${nextText}
+            </div>
+          `;
+        })()}
+        ${(() => {
+          const kei = pvp.damage_scouting / pvp.battles / 1000 + winRate;
+          const nextKEI = keiNextTier(kei);
+          const nextKEIText = nextKEI
+            ? `<div class="winrate-next" style="color:${keiColor(kei + parseFloat(nextKEI.needed))}">+${nextKEI.needed} to ${nextKEI.label}</div>`
+            : "";
+          return `
+            <div class="winrate-display" style="color:${keiColor(kei)}">
+              <div class="metric-label">Kokou's Effectiveness Index (KEI) <a href="/kei" target="_blank" class="info-link">?</a></div>
+              <div class="winrate-top">
+                <div class="metric-pct">${kei.toFixed(2)}</div>
+                <div class="winrate-label">${keiLabel(kei)}</div>
+              </div>
+              ${nextKEIText}
+            </div>
+          `;
+        })()}
+        ${row("Battles", pvp.battles.toLocaleString())}
+        ${row("Wins", pvp.wins.toLocaleString())}
+        ${row("Losses", pvp.losses.toLocaleString())}
+        ${row("Draws", pvp.draws.toLocaleString())}
+        ${row("Survival Rate", `${((pvp.survived_battles / pvp.battles) * 100).toFixed(2)}%`)}
+      </div>
+      <div class="stat-card stat-card-medals">
+        <h3>Medals</h3>
+        <p class="wip-label">WORK IN PROGRESS</p>
+      </div>
+      <div class="stat-card">
+        <h3>Damage</h3>
+        ${row("Damage Dealt", pvp.damage_dealt.toLocaleString())}
+        ${row("Avg. Damage / Battle", (pvp.damage_dealt / pvp.battles).toLocaleString(undefined, { maximumFractionDigits: 0 }))}
+        ${row("Spotting Damage", pvp.damage_scouting.toLocaleString())}
+        ${row("Avg. Spotting / Battle", (pvp.damage_scouting / pvp.battles).toLocaleString(undefined, { maximumFractionDigits: 0 }))}
+      </div>
+      <div class="stat-card">
+        <h3>Sinks</h3>
+        ${row("Warships Sunk", pvp.frags.toLocaleString())}
+        ${row("Avg. Sunk / Battle", (pvp.frags / pvp.battles).toFixed(2))}
+        ${row("Destruction Ratio", (pvp.frags / (pvp.battles - pvp.survived_battles)).toFixed(2))}
+      </div>
+      <div class="stat-card">
+        <h3>Experience</h3>
+        ${row("Total XP", pvp.xp.toLocaleString())}
+        ${row("Avg. XP / Battle", (pvp.xp / pvp.battles).toLocaleString(undefined, { maximumFractionDigits: 0 }))}
+      </div>
+    </div>
+  `;
+}
+
 function tryClanRender() {
   const clanCard = document.getElementById("clan-card");
   if (!clanCard || !clanPayload) return;
@@ -35,12 +217,38 @@ function tryClanRender() {
   `;
 }
 
-// for the search bar
-document.getElementById("view-stats").addEventListener("click", (event) => {
-  // prevent the default form submission behavior
-  event.preventDefault();
-  const username = document.getElementById("username").value;
-  window.location.href = `/player/${username}`;
+// battle type rack: switches the Battle Record stats (and PR) between
+// Random Battles, Solo, Duo Division, and Trio Division
+const battleTypeButtons = document.querySelectorAll(".battle-type-btn");
+battleTypeButtons.forEach((btn) => {
+  btn.addEventListener("click", async () => {
+    const mode = btn.dataset.mode;
+    if (!accountId || mode === currentMode) return;
+
+    battleTypeButtons.forEach((b) => b.classList.remove("active"));
+    btn.classList.add("active");
+    currentMode = mode;
+    renderStatGrid();
+    renderShipsForMode(mode);
+
+    if (modeCache[mode]) return;
+
+    try {
+      await loadMode(mode);
+      if (currentMode === mode) {
+        renderStatGrid();
+        renderShipsForMode(mode);
+      }
+    } catch (err) {
+      console.error("Error loading battle type stats:", err);
+      if (currentMode === mode) {
+        document.getElementById("stat-grid-container").innerHTML =
+          `<p>Error loading stats. Please try again later.</p>`;
+        document.getElementById("ships-container").innerHTML =
+          `<p>Error loading ship stats. Please try again later.</p>`;
+      }
+    }
+  });
 });
 
 // fetch the player's main stats from the server
@@ -51,98 +259,14 @@ fetch(`/api/player/${username}`)
     document.getElementById;
 
     // display the player's stats on the page
-    const accountData = data.data[Object.keys(data.data)[0]];
+    accountId = Object.keys(data.data)[0];
+    accountData = data.data[accountId];
     const pvp = accountData.statistics.pvp;
     const winRate = (pvp.wins / pvp.battles) * 100;
-
     const currentWrColor = wrColor(winRate);
 
-    document.getElementById("player-header-container").innerHTML = `
-      <div class="player-header">
-        <h2><span id="clan-tag">${resolvedClanTag ? `[${resolvedClanTag}]` : ""}</span>${accountData.nickname}</h2>
-        <div id="captain-title" class="captain-title placeholder">--</div>
-        <div class="player-meta">
-          <span>Last Battle: ${new Date(accountData.last_battle_time * 1000).toLocaleString()}</span>
-          <span>Updated: ${new Date(accountData.stats_updated_at * 1000).toLocaleString()}</span>
-        </div>
-      </div>
-    `;
-
-    document.getElementById("stat-grid-container").innerHTML = `
-      <div class="stat-grid">
-        <div class="stat-card stat-card-battle">
-          <h3>Battle Record</h3>
-          ${(() => {
-            const next = wrNextTier(winRate);
-            const nextText = next
-              ? `<div class="winrate-next" style="color:${wrColor(parseFloat(winRate) + parseFloat(next.needed))}">+${next.needed}% to ${next.label}</div>`
-              : "";
-            return `
-              <div class="winrate-display" style="color:${currentWrColor}">
-                <div class="metric-label">Random Battles Winrate</div>
-                <div class="winrate-top">
-                  <div class="winrate-pct">${winRate.toFixed(2)}%</div>
-                  <div class="winrate-label">${wrLabel(winRate)}</div>
-                </div>
-                ${nextText}
-              </div>
-            `;
-          })()}
-          <div class="winrate-display" id="pr-display" style="color:#546e7a">
-            <div class="metric-label">WoWS Numbers Personal Rating (PR)</div>
-            <div class="winrate-top">
-              <div class="metric-pct" id="pr-num">—</div>
-              <div class="winrate-label" id="pr-tier"></div>
-            </div>
-            <div class="winrate-next" id="pr-next"></div>
-          </div>
-          ${(() => {
-            const kei = pvp.damage_scouting / pvp.battles / 1000 + winRate;
-            const nextKEI = keiNextTier(kei);
-            const nextKEIText = nextKEI
-              ? `<div class="winrate-next" style="color:${keiColor(kei + parseFloat(nextKEI.needed))}">+${nextKEI.needed} to ${nextKEI.label}</div>`
-              : "";
-            return `
-              <div class="winrate-display" style="color:${keiColor(kei)}">
-                <div class="metric-label">Kokou's Effectiveness Index (KEI)</div>
-                <div class="winrate-top">
-                  <div class="metric-pct">${kei.toFixed(2)}</div>
-                  <div class="winrate-label">${keiLabel(kei)}</div>
-                </div>
-                ${nextKEIText}
-              </div>
-            `;
-          })()}
-          ${row("Battles", pvp.battles.toLocaleString())}
-          ${row("Wins", pvp.wins.toLocaleString())}
-          ${row("Losses", pvp.losses.toLocaleString())}
-          ${row("Draws", pvp.draws.toLocaleString())}
-          ${row("Survival Rate", `${((pvp.survived_battles / pvp.battles) * 100).toFixed(2)}%`)}
-        </div>
-        <div class="stat-card stat-card-medals">
-          <h3>Medals</h3>
-          <p class="wip-label">WORK IN PROGRESS</p>
-        </div>
-        <div class="stat-card">
-          <h3>Damage</h3>
-          ${row("Damage Dealt", pvp.damage_dealt.toLocaleString())}
-          ${row("Avg. Damage / Battle", (pvp.damage_dealt / pvp.battles).toLocaleString(undefined, { maximumFractionDigits: 0 }))}
-          ${row("Spotting Damage", pvp.damage_scouting.toLocaleString())}
-          ${row("Avg. Spotting / Battle", (pvp.damage_scouting / pvp.battles).toLocaleString(undefined, { maximumFractionDigits: 0 }))}
-        </div>
-        <div class="stat-card">
-          <h3>Sinks</h3>
-          ${row("Warships Sunk", pvp.frags.toLocaleString())}
-          ${row("Avg. Sunk / Battle", (pvp.frags / pvp.battles).toFixed(2))}
-          ${row("Destruction Ratio", (pvp.frags / (pvp.battles - pvp.survived_battles)).toFixed(2))}
-        </div>
-        <div class="stat-card">
-          <h3>Experience</h3>
-          ${row("Total XP", pvp.xp.toLocaleString())}
-          ${row("Avg. XP / Battle", (pvp.xp / pvp.battles).toLocaleString(undefined, { maximumFractionDigits: 0 }))}
-        </div>
-      </div>
-    `;
+    modeCache.pvp = { pvp, winRate, currentWrColor, pr: null };
+    tryRenderPlayerDetails();
     tryClanRender();
   })
   .catch((error) => {
@@ -165,8 +289,8 @@ const columns = [
   { key: "survival_rate", label: "Survival Rate" },
 ];
 
-function getSortVal(ship, key) {
-  const pvp = ship.pvp;
+function getSortVal(ship, key, pvpKey = "pvp") {
+  const pvp = ship[pvpKey];
   const played = pvp && pvp.battles > 0;
   switch (key) {
     case "name":
@@ -222,6 +346,28 @@ const nationCoalition = {
   spain: "Non-Aligned",
   europe: "Non-Aligned",
   pan_asia: "Non-Aligned",
+};
+
+const coalitionColors = {
+  Allies: "#3498db",
+  Axis: "#e74c3c",
+  "Non-Aligned": "#c9a84c",
+};
+
+const nationColors = {
+  "United States": "#3498db",
+  "United Kingdom": "#e74c3c",
+  France: "#5dade2",
+  "British Commonwealth": "#9b59b6",
+  Netherlands: "#e67e22",
+  "Soviet Union": "#c0392b",
+  "Pan-America": "#1abc9c",
+  "German Reich": "#95a5a6",
+  "Empire of Japan": "#e91e63",
+  "Kingdom of Italy": "#2ecc71",
+  "Spanish State": "#f39c12",
+  "Pan-Europe": "#34495e",
+  "Pan-Asia": "#f1c40f",
 };
 
 const romanNumerals = [
@@ -394,7 +540,7 @@ function prColor(pr) {
                 : "#e74c3c";
 }
 
-function calculatePR(ships, expectedData) {
+function calculatePR(ships, expectedData, pvpKey = "pvp") {
   let actualDmg = 0,
     actualFrags = 0,
     actualWins = 0;
@@ -403,7 +549,7 @@ function calculatePR(ships, expectedData) {
     expectedWins = 0;
 
   ships.forEach((ship) => {
-    const pvp = ship.pvp;
+    const pvp = ship[pvpKey];
     if (!pvp || pvp.battles === 0) return;
     const exp = expectedData[ship.ship_id];
     if (!exp) return;
@@ -429,11 +575,11 @@ function calculatePR(ships, expectedData) {
   return Math.round(700 * nDmg + 300 * nFrags + 150 * nWins);
 }
 
-function renderShipsTable(ships, sortCol, sortAsc) {
+function renderShipsTable(ships, sortCol, sortAsc, pvpKey = "pvp") {
   const ph = `<td class="placeholder">--</td>`;
   const sorted = [...ships].sort((a, b) => {
-    const aVal = getSortVal(a, sortCol);
-    const bVal = getSortVal(b, sortCol);
+    const aVal = getSortVal(a, sortCol, pvpKey);
+    const bVal = getSortVal(b, sortCol, pvpKey);
     const diff =
       typeof aVal === "string" ? aVal.localeCompare(bVal) : aVal - bVal;
     return sortAsc ? diff : -diff;
@@ -448,7 +594,7 @@ function renderShipsTable(ships, sortCol, sortAsc) {
 
   const rows = sorted
     .map((ship) => {
-      const pvp = ship.pvp;
+      const pvp = ship[pvpKey];
       const hasPlayed = pvp && pvp.battles > 0;
       if (!hasPlayed)
         return `<tr><td>${ship.name ?? `<span class="placeholder">Unknown</span>`}</td><td>${ship.type ? (ship.type === "AirCarrier" ? "Aircraft Carrier" : ship.type) : `<span class="placeholder">--</span>`}</td><td>${ship.tier ? (romanNumerals[ship.tier - 1] ?? ship.tier) : `<span class="placeholder">--</span>`}</td><td>0</td>${ph}${ph}${ph}${ph}${ph}${ph}</tr>`;
@@ -490,32 +636,10 @@ Promise.all([
   .then(([data, expectedRes]) => {
     const shipsContainer = document.getElementById("ships-container");
     const ships = data.data[Object.keys(data.data)[0]];
+    modeCache.pvp = { ...modeCache.pvp, ships };
 
-    let sortCol = "battles";
-    let sortAsc = false;
-
-    // aggregate battles by class, nation, tier, and coalition
-    const byClass = {};
-    const byNation = {};
-    const byTierNum = {};
-    const byCoalition = {};
-    ships.forEach((ship) => {
-      const battles = ship.pvp?.battles ?? 0;
-      if (battles === 0) return;
-      if (ship.type) {
-        const t = ship.type === "AirCarrier" ? "Aircraft Carrier" : ship.type;
-        byClass[t] = (byClass[t] ?? 0) + battles;
-      }
-      if (ship.nation) {
-        const n = nationLabel[ship.nation] ?? ship.nation;
-        byNation[n] = (byNation[n] ?? 0) + battles;
-        const c = nationCoalition[ship.nation] ?? ship.nation;
-        byCoalition[c] = (byCoalition[c] ?? 0) + battles;
-      }
-      if (ship.tier) {
-        byTierNum[ship.tier] = (byTierNum[ship.tier] ?? 0) + battles;
-      }
-    });
+    // captain title is always based on overall Random Battles play, regardless of selected mode
+    const { byClass, byCoalition } = aggregateShipBattles(ships, "pvp");
 
     const classLabelMap = {
       Destroyer: "Destroyer",
@@ -547,12 +671,8 @@ Promise.all([
         ? (coalitionPrefixMap[topCoalition] ?? topCoalition)
         : "";
 
-    const captainTitle = coalitionPrefix ? `${coalitionPrefix} ${shipTypeTitle}` : shipTypeTitle;
-    const captainTitleEl = document.getElementById("captain-title");
-    if (captainTitleEl) {
-      captainTitleEl.textContent = captainTitle;
-      captainTitleEl.classList.remove("placeholder");
-    }
+    captainTitle = coalitionPrefix ? `${coalitionPrefix} ${shipTypeTitle}` : shipTypeTitle;
+    tryRenderPlayerDetails();
 
     //code for the charts, uses chart.js to display a doughnut chart of battles by class and nation
     const chartColors = [

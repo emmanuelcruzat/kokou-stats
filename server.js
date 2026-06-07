@@ -6,6 +6,14 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.static("public"));
 
+// resolves a username to its WoWS account ID via the account search endpoint
+async function getAccountId(username) {
+  const searchRes = await axios.get(
+    `https://api.worldofwarships.com/wows/account/list/?application_id=${process.env.WOWS_API_KEY}&search=${username}`,
+  );
+  return searchRes.data.data[0].account_id;
+}
+
 // route to serve the player stats page
 app.get("/player/:username", async (req, res) => {
   res.sendFile(__dirname + "/public/player.html");
@@ -16,6 +24,11 @@ app.get("/about", async (req, res) => {
   res.sendFile(__dirname + "/public/about.html");
 });
 
+// route to serve the page explaining Kokou's Effectiveness Index (KEI)
+app.get("/kei", async (req, res) => {
+  res.sendFile(__dirname + "/public/kei.html");
+});
+
 // API ROUTES
 app.get("/api/myip", async (req, res) => {
   const response = await axios.get("https://api.ipify.org?format=json");
@@ -24,18 +37,14 @@ app.get("/api/myip", async (req, res) => {
 
 // basic route to check if the API is running
 app.get("/api", (req, res) => {
-  res.send("kokou-stats API is running!");
+  res.send("The kokoustats API is running!");
 });
 
-//main player data
+//main player data for ALL random battles
 app.get("/api/player/:username", async (req, res) => {
   try {
     const username = req.params.username;
-    const response = await axios.get(
-      `https://api.worldofwarships.com/wows/account/list/?application_id=${process.env.WOWS_API_KEY}&search=${username}`,
-    );
-    console.log("Search response:", JSON.stringify(response.data));
-    const accountId = response.data.data[0].account_id;
+    const accountId = await getAccountId(username);
     const accountData = await axios.get(
       `https://api.worldofwarships.com/wows/account/info/?application_id=${process.env.WOWS_API_KEY}&account_id=${accountId}`,
     );
@@ -44,7 +53,103 @@ app.get("/api/player/:username", async (req, res) => {
   } catch (err) {
     console.error("Error fetching player stats:", err.message);
     console.error("Stack:", err.stack);
-    if (err.response) console.error("Wargaming response:", JSON.stringify(err.response.data));
+    if (err.response)
+      console.error("Wargaming response:", JSON.stringify(err.response.data));
+    res.status(500).json({ error: "Failed to fetch player stats" });
+  }
+});
+
+//route for random battle stats (solo)
+app.get("/api/player/:username/solo", async (req, res) => {
+  try {
+    const username = req.params.username;
+    const accountId = await getAccountId(username);
+    const accountData = await axios.get(
+      `https://api.worldofwarships.com/wows/account/info/?application_id=${process.env.WOWS_API_KEY}&account_id=${accountId}&extra=statistics.pvp_solo`,
+    );
+    console.log("Account data:", JSON.stringify(accountData.data));
+    res.json(accountData.data);
+  } catch (err) {
+    console.error("Error fetching player stats:", err.message);
+    console.error("Stack:", err.stack);
+    if (err.response)
+      console.error("Wargaming response:", JSON.stringify(err.response.data));
+    res.status(500).json({ error: "Failed to fetch player stats" });
+  }
+});
+
+//route for random battle stats (division 2)
+app.get("/api/player/:username/div2", async (req, res) => {
+  try {
+    const username = req.params.username;
+    const accountId = await getAccountId(username);
+    const accountData = await axios.get(
+      `https://api.worldofwarships.com/wows/account/info/?application_id=${process.env.WOWS_API_KEY}&account_id=${accountId}&extra=statistics.pvp_div2`,
+    );
+    console.log("Account data:", JSON.stringify(accountData.data));
+    res.json(accountData.data);
+  } catch (err) {
+    console.error("Error fetching player stats:", err.message);
+    console.error("Stack:", err.stack);
+    if (err.response)
+      console.error("Wargaming response:", JSON.stringify(err.response.data));
+    res.status(500).json({ error: "Failed to fetch player stats" });
+  }
+});
+
+//route for random battle stats (division 3)
+app.get("/api/player/:username/div3", async (req, res) => {
+  try {
+    const username = req.params.username;
+    const accountId = await getAccountId(username);
+    const accountData = await axios.get(
+      `https://api.worldofwarships.com/wows/account/info/?application_id=${process.env.WOWS_API_KEY}&account_id=${accountId}&extra=statistics.pvp_div3`,
+    );
+    console.log("Account data:", JSON.stringify(accountData.data));
+    res.json(accountData.data);
+  } catch (err) {
+    console.error("Error fetching player stats:", err.message);
+    console.error("Stack:", err.stack);
+    if (err.response)
+      console.error("Wargaming response:", JSON.stringify(err.response.data));
+    res.status(500).json({ error: "Failed to fetch player stats" });
+  }
+});
+
+//route for ranked battle stats
+app.get("/api/player/:username/rank", async (req, res) => {
+  try {
+    const username = req.params.username;
+    const accountId = await getAccountId(username);
+    const accountData = await axios.get(
+      `https://api.worldofwarships.com/wows/account/info/?application_id=${process.env.WOWS_API_KEY}&account_id=${accountId}&extra=statistics.rank_solo`,
+    );
+    console.log("Account data:", JSON.stringify(accountData.data));
+    res.json(accountData.data);
+  } catch (err) {
+    console.error("Error fetching player stats:", err.message);
+    console.error("Stack:", err.stack);
+    if (err.response)
+      console.error("Wargaming response:", JSON.stringify(err.response.data));
+    res.status(500).json({ error: "Failed to fetch player stats" });
+  }
+});
+
+//route for co-op battle stats
+app.get("/api/player/:username/coop", async (req, res) => {
+  try {
+    const username = req.params.username;
+    const accountId = await getAccountId(username);
+    const accountData = await axios.get(
+      `https://api.worldofwarships.com/wows/account/info/?application_id=${process.env.WOWS_API_KEY}&account_id=${accountId}&extra=statistics.pve`,
+    );
+    console.log("Account data:", JSON.stringify(accountData.data));
+    res.json(accountData.data);
+  } catch (err) {
+    console.error("Error fetching player stats:", err.message);
+    console.error("Stack:", err.stack);
+    if (err.response)
+      console.error("Wargaming response:", JSON.stringify(err.response.data));
     res.status(500).json({ error: "Failed to fetch player stats" });
   }
 });
@@ -52,13 +157,16 @@ app.get("/api/player/:username", async (req, res) => {
 app.get("/api/player/:username/ships", async (req, res) => {
   try {
     const username = req.params.username;
-    const searchRes = await axios.get(
-      `https://api.worldofwarships.com/wows/account/list/?application_id=${process.env.WOWS_API_KEY}&search=${username}`,
-    );
+    const accountId = await getAccountId(username);
 
-    const accountId = searchRes.data.data[0].account_id;
+    // optional ?extra=pvp_solo|pvp_div2|pvp_div3 to fetch per-ship stats for a specific battle type
+    const allowedExtras = ["pvp_solo", "pvp_div2", "pvp_div3", "rank_solo", "pve"];
+    const extraParam = allowedExtras.includes(req.query.extra)
+      ? `&extra=${req.query.extra}`
+      : "";
+
     const shipStatsRes = await axios.get(
-      `https://api.worldofwarships.com/wows/ships/stats/?application_id=${process.env.WOWS_API_KEY}&account_id=${accountId}`,
+      `https://api.worldofwarships.com/wows/ships/stats/?application_id=${process.env.WOWS_API_KEY}&account_id=${accountId}${extraParam}`,
     );
 
     const ships = shipStatsRes.data.data[accountId];
@@ -94,11 +202,7 @@ app.get("/api/player/:username/ships", async (req, res) => {
 app.get("/api/player/:username/clan", async (req, res) => {
   try {
     const username = req.params.username;
-    const searchRes = await axios.get(
-      `https://api.worldofwarships.com/wows/account/list/?application_id=${process.env.WOWS_API_KEY}&search=${username}`,
-    );
-
-    const accountId = searchRes.data.data[0].account_id;
+    const accountId = await getAccountId(username);
 
     console.log(accountId);
 
@@ -143,13 +247,7 @@ app.get("/api/expected", async (req, res) => {
 // temporary route to get a player's winrate
 app.get("/player/:username/wr", async (req, res) => {
   const username = req.params.username;
-  // basic route to obtain a user that we want to fetch stats for
-
-  const response = await axios.get(
-    `https://api.worldofwarships.com/wows/account/list/?application_id=${process.env.WOWS_API_KEY}&search=${username}`,
-  );
-
-  const accountId = response.data.data[0].account_id;
+  const accountId = await getAccountId(username);
   const accountData = await axios.get(
     `https://api.worldofwarships.com/wows/account/info/?application_id=${process.env.WOWS_API_KEY}&account_id=${accountId}`,
   );

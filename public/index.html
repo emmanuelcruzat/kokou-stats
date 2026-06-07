@@ -8,8 +8,24 @@
   </head>
   <body>
     <header>
-      <h1><a href="/">Kokou Stats</a></h1>
+      <h1><a href="/">KokouStats</a></h1>
       <nav>
+        <form
+          class="nav-search"
+          id="nav-search-form"
+          action="/player/:username"
+          method="GET"
+        >
+          <input
+            type="text"
+            id="nav-username"
+            name="username"
+            placeholder="Search player..."
+            aria-label="Search player"
+            required
+          />
+          <button type="submit">Search</button>
+        </form>
         <ul>
           <li><a href="/">Home</a></li>
           <li><a href="/about">About</a></li>
@@ -35,15 +51,30 @@
 
       <section class="search">
         <h2>Search Player</h2>
-        <form action="/player/:username" method="GET">
-          <label for="username">Username:</label>
-          <input type="text" id="username" name="username" required />
-          <button type="submit" id="view-stats">View Stats</button>
+        <form id="home-search-form" action="/player/:username" method="GET">
+          <label for="home-username">Username:</label>
+          <input type="text" id="home-username" name="username" required />
+          <button type="submit">View Stats</button>
         </form>
       </section>
+
       <section class="changelog">
         <h2>Changelog</h2>
         <div class="changelog-list">
+          <div class="changelog-entry">
+            <div class="changelog-version">v0.a.3</div>
+            <div class="changelog-date">2026-06-07</div>
+            <ul class="changelog-items">
+              <li>
+                Can now select battle type for stats (Random, Solo, Duo
+                Division, Trio Division, Ranked, Co-Op)
+              </li>
+              <li>
+                Added "?" links next to PR and KEI explaining what each metric
+                means, including a new dedicated KEI page
+              </li>
+            </ul>
+          </div>
           <div class="changelog-entry">
             <div class="changelog-version">v0.a.2</div>
             <div class="changelog-date">2026-05-27</div>
@@ -84,9 +115,16 @@
     </main>
 
     <footer>
-      <p>&copy; 2026 Kokou Stats. All rights reserved.</p>
+      <p>
+        &copy; 2026 KokouStats. All rights reserved. | &copy; 2026
+        Wargaming.net. All rights reserved.
+      </p>
+      <p>
+        This is application is a third-party tool under Wargaming Developers
+        Partner Program.
+      </p>
     </footer>
 
-    <script src="index.js"></script>
+    <script src="/search.js"></script>
   </body>
 </html>
