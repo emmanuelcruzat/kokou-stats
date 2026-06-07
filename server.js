@@ -28,6 +28,11 @@ app.get("/about", async (req, res) => {
   res.sendFile(__dirname + "/public/about.html");
 });
 
+// route to serve the page explaining Kokou's Effectiveness Index (KEI)
+app.get("/kei", async (req, res) => {
+  res.sendFile(__dirname + "/public/kei.html");
+});
+
 // API ROUTES
 app.get("/api/myip", async (req, res) => {
   const response = await axios.get("https://api.ipify.org?format=json");

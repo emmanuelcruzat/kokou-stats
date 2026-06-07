@@ -8,9 +8,25 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   </head>
   <body>
-<header>
-      <h1><a href="/">Kokou Stats</a></h1>
+    <header>
+      <h1><a href="/">KokouStats</a></h1>
       <nav>
+        <form
+          class="nav-search"
+          id="nav-search-form"
+          action="/player/:username"
+          method="GET"
+        >
+          <input
+            type="text"
+            id="nav-username"
+            name="username"
+            placeholder="Search player..."
+            aria-label="Search player"
+            required
+          />
+          <button type="submit">Search</button>
+        </form>
         <ul>
           <li><a href="/">Home</a></li>
           <li><a href="/about">About</a></li>
@@ -26,28 +42,40 @@
     </header>
 
     <main>
-      <section class="search">
-        <h2>Search Player</h2>
-        <form action="/player/:username" method="GET">
-          <label for="username">Username:</label>
-          <input type="text" id="username" name="username" required />
-          <button type="submit" id="view-stats">View Stats</button>
-        </form>
-      </section>
       <section id="stats-container">
         <div class="header-row">
-          <div id="player-header-container"><div class="loading"><div class="spinner"></div><p>Loading player...</p></div></div>
-          <div id="clan-card" class="stat-card" style="display:none"></div>
+          <div id="player-header-container">
+            <div class="loading">
+              <div class="spinner"></div>
+              <p>Loading player...</p>
+            </div>
+          </div>
+          <div id="clan-card" class="stat-card" style="display: none"></div>
         </div>
         <div class="battle-type-rack">
-          <button class="battle-type-btn active" data-mode="pvp">Random Battles</button>
+          <button class="battle-type-btn active" data-mode="pvp">
+            Random Battles
+          </button>
           <button class="battle-type-btn" data-mode="solo">Solo</button>
-          <button class="battle-type-btn" data-mode="div2">Double Division</button>
-          <button class="battle-type-btn" data-mode="div3">Triple Division</button>
-          <button class="battle-type-btn" data-mode="rank">Ranked Battles</button>
-          <button class="battle-type-btn" data-mode="coop">Co-Op Battles</button>
+          <button class="battle-type-btn" data-mode="div2">
+            Double Division
+          </button>
+          <button class="battle-type-btn" data-mode="div3">
+            Triple Division
+          </button>
+          <button class="battle-type-btn" data-mode="rank">
+            Ranked Battles
+          </button>
+          <button class="battle-type-btn" data-mode="coop">
+            Co-Op Battles
+          </button>
         </div>
-        <div id="stat-grid-container"><div class="loading"><div class="spinner"></div><p>Loading stats...</p></div></div>
+        <div id="stat-grid-container">
+          <div class="loading">
+            <div class="spinner"></div>
+            <p>Loading stats...</p>
+          </div>
+        </div>
       </section>
       <section class="error-message" style="display: none">
         <h2>Error</h2>
@@ -62,8 +90,12 @@
           <div class="chart-card-header">
             <h3>Battles by Nation</h3>
             <div class="chart-toggle">
-              <button class="toggle-btn active" id="toggle-nation">Nation</button>
-              <button class="toggle-btn" id="toggle-coalition">Coalition</button>
+              <button class="toggle-btn active" id="toggle-nation">
+                Nation
+              </button>
+              <button class="toggle-btn" id="toggle-coalition">
+                Coalition
+              </button>
             </div>
           </div>
           <canvas id="chart-nation"></canvas>
@@ -75,13 +107,16 @@
       </div>
       <section id="ships-container">
         <h2>Ships</h2>
-        <div class="loading"><div class="spinner"></div><p>Loading ship statistics...</p></div>
+        <div class="loading">
+          <div class="spinner"></div>
+          <p>Loading ship statistics...</p>
+        </div>
       </section>
     </main>
 
     <footer>
       <p>
-        &copy; 2026 Kokou Stats. All rights reserved. | &copy; 2026
+        &copy; 2026 KokouStats. All rights reserved. | &copy; 2026
         Wargaming.net. All rights reserved.
       </p>
       <p>
@@ -89,6 +124,7 @@
         Partner Program.
       </p>
     </footer>
+    <script src="/search.js"></script>
     <script src="/player.js"></script>
   </body>
 </html>
