@@ -191,15 +191,16 @@ main {
 
 .battle-type-btn {
   flex: 1;
-  padding: 0.6rem 1rem;
+  padding: 0.6rem 0.5rem;
   background-color: transparent;
   border: 1px solid #1e3448;
   border-radius: 6px;
   color: #90a4ae;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.15s;
+  white-space: nowrap;
 }
 
 .battle-type-btn:hover {

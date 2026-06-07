@@ -31,13 +31,17 @@ const battleModeConfig = {
   solo: { statsField: "pvp_solo", endpoint: "solo", shipsExtra: "pvp_solo" },
   div2: { statsField: "pvp_div2", endpoint: "div2", shipsExtra: "pvp_div2" },
   div3: { statsField: "pvp_div3", endpoint: "div3", shipsExtra: "pvp_div3" },
+  rank: { statsField: "rank_solo", endpoint: "rank", shipsExtra: "rank_solo" },
+  coop: { statsField: "pve", endpoint: "coop", shipsExtra: "pve" },
 };
 
 const battleModeLabels = {
   pvp: "Random Battles",
   solo: "Solo",
-  div2: "Duo Division",
-  div3: "Trio Division",
+  div2: "Double Division",
+  div3: "Triple Division",
+  rank: "Ranked Battles",
+  coop: "Co-Op Battles",
 };
 
 function tryRenderPlayerDetails() {

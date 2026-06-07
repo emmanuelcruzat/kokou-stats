@@ -115,13 +115,51 @@ app.get("/api/player/:username/div3", async (req, res) => {
   }
 });
 
+//route for ranked battle stats
+app.get("/api/player/:username/rank", async (req, res) => {
+  try {
+    const username = req.params.username;
+    const accountId = await getAccountId(username);
+    const accountData = await axios.get(
+      `https://api.worldofwarships.com/wows/account/info/?application_id=${process.env.WOWS_API_KEY}&account_id=${accountId}&extra=statistics.rank_solo`,
+    );
+    console.log("Account data:", JSON.stringify(accountData.data));
+    res.json(accountData.data);
+  } catch (err) {
+    console.error("Error fetching player stats:", err.message);
+    console.error("Stack:", err.stack);
+    if (err.response)
+      console.error("Wargaming response:", JSON.stringify(err.response.data));
+    res.status(500).json({ error: "Failed to fetch player stats" });
+  }
+});
+
+//route for co-op battle stats
+app.get("/api/player/:username/coop", async (req, res) => {
+  try {
+    const username = req.params.username;
+    const accountId = await getAccountId(username);
+    const accountData = await axios.get(
+      `https://api.worldofwarships.com/wows/account/info/?application_id=${process.env.WOWS_API_KEY}&account_id=${accountId}&extra=statistics.pve`,
+    );
+    console.log("Account data:", JSON.stringify(accountData.data));
+    res.json(accountData.data);
+  } catch (err) {
+    console.error("Error fetching player stats:", err.message);
+    console.error("Stack:", err.stack);
+    if (err.response)
+      console.error("Wargaming response:", JSON.stringify(err.response.data));
+    res.status(500).json({ error: "Failed to fetch player stats" });
+  }
+});
+
 app.get("/api/player/:username/ships", async (req, res) => {
   try {
     const username = req.params.username;
     const accountId = await getAccountId(username);
 
     // optional ?extra=pvp_solo|pvp_div2|pvp_div3 to fetch per-ship stats for a specific battle type
-    const allowedExtras = ["pvp_solo", "pvp_div2", "pvp_div3"];
+    const allowedExtras = ["pvp_solo", "pvp_div2", "pvp_div3", "rank_solo", "pve"];
     const extraParam = allowedExtras.includes(req.query.extra)
       ? `&extra=${req.query.extra}`
       : "";
