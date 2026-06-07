@@ -25,6 +25,16 @@ let initialPrReady = false;
 let currentMode = "pvp";
 const modeCache = {};
 
+// shared state for the ships table + charts so they can be re-rendered per battle-type mode
+let sortCol = "battles";
+let sortAsc = false;
+let nationView = "nation";
+let classChart = null;
+let nationChart = null;
+let tierChart = null;
+let currentByNation = {};
+let currentByCoalition = {};
+
 // maps each battle-type button to the account-info field and ships endpoint needed to load it
 const battleModeConfig = {
   pvp: { statsField: "pvp", endpoint: null, shipsExtra: null },
@@ -77,7 +87,7 @@ async function loadMode(mode) {
   const modeShips = shipsRes.data[accountId];
   const pr = expectedData ? calculatePR(modeShips, expectedData, config.statsField) : null;
 
-  const entry = { pvp, winRate, currentWrColor, pr };
+  const entry = { pvp, winRate, currentWrColor, pr, ships: modeShips };
   modeCache[mode] = entry;
   return entry;
 }
@@ -227,17 +237,23 @@ battleTypeButtons.forEach((btn) => {
     btn.classList.add("active");
     currentMode = mode;
     renderStatGrid();
+    renderShipsForMode(mode);
 
     if (modeCache[mode]) return;
 
     try {
       await loadMode(mode);
-      if (currentMode === mode) renderStatGrid();
+      if (currentMode === mode) {
+        renderStatGrid();
+        renderShipsForMode(mode);
+      }
     } catch (err) {
       console.error("Error loading battle type stats:", err);
       if (currentMode === mode) {
         document.getElementById("stat-grid-container").innerHTML =
           `<p>Error loading stats. Please try again later.</p>`;
+        document.getElementById("ships-container").innerHTML =
+          `<p>Error loading ship stats. Please try again later.</p>`;
       }
     }
   });
@@ -281,8 +297,8 @@ const columns = [
   { key: "survival_rate", label: "Survival Rate" },
 ];
 
-function getSortVal(ship, key) {
-  const pvp = ship.pvp;
+function getSortVal(ship, key, pvpKey = "pvp") {
+  const pvp = ship[pvpKey];
   const played = pvp && pvp.battles > 0;
   switch (key) {
     case "name":
@@ -567,11 +583,11 @@ function calculatePR(ships, expectedData, pvpKey = "pvp") {
   return Math.round(700 * nDmg + 300 * nFrags + 150 * nWins);
 }
 
-function renderShipsTable(ships, sortCol, sortAsc) {
+function renderShipsTable(ships, sortCol, sortAsc, pvpKey = "pvp") {
   const ph = `<td class="placeholder">--</td>`;
   const sorted = [...ships].sort((a, b) => {
-    const aVal = getSortVal(a, sortCol);
-    const bVal = getSortVal(b, sortCol);
+    const aVal = getSortVal(a, sortCol, pvpKey);
+    const bVal = getSortVal(b, sortCol, pvpKey);
     const diff =
       typeof aVal === "string" ? aVal.localeCompare(bVal) : aVal - bVal;
     return sortAsc ? diff : -diff;
@@ -586,7 +602,7 @@ function renderShipsTable(ships, sortCol, sortAsc) {
 
   const rows = sorted
     .map((ship) => {
-      const pvp = ship.pvp;
+      const pvp = ship[pvpKey];
       const hasPlayed = pvp && pvp.battles > 0;
       if (!hasPlayed)
         return `<tr><td>${ship.name ?? `<span class="placeholder">Unknown</span>`}</td><td>${ship.type ? (ship.type === "AirCarrier" ? "Aircraft Carrier" : ship.type) : `<span class="placeholder">--</span>`}</td><td>${ship.tier ? (romanNumerals[ship.tier - 1] ?? ship.tier) : `<span class="placeholder">--</span>`}</td><td>0</td>${ph}${ph}${ph}${ph}${ph}${ph}</tr>`;
@@ -621,37 +637,261 @@ function renderShipsTable(ships, sortCol, sortAsc) {
 }
 
 
+//code for the charts, uses chart.js to display a doughnut chart of battles by class and nation
+const chartColors = [
+  "#3498db",
+  "#e74c3c",
+  "#2ecc71",
+  "#f1c40f",
+  "#9b59b6",
+  "#1abc9c",
+  "#e67e22",
+  "#e91e63",
+  "#00bcd4",
+  "#8bc34a",
+  "#ff5722",
+];
+
+const barChartColor = "#3498db";
+
+function makeBarChart(id, labels, values) {
+  const total = values.reduce((a, b) => a + b, 0);
+  return new Chart(document.getElementById(id), {
+    type: "bar",
+    data: {
+      labels,
+      datasets: [
+        {
+          data: values,
+          backgroundColor: barChartColor,
+          borderWidth: 0,
+        },
+      ],
+    },
+    options: {
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => {
+              const pct = ((ctx.parsed.y / total) * 100).toFixed(1);
+              return `${ctx.parsed.y.toLocaleString()} battles (${pct}%)`;
+            },
+          },
+        },
+      },
+      scales: {
+        x: { ticks: { color: "#e0e6ed" }, grid: { color: "#1e3448" } },
+        y: { ticks: { color: "#e0e6ed" }, grid: { color: "#1e3448" } },
+      },
+    },
+  });
+}
+
+function makeChart(id, labels, values, colors) {
+  const total = values.reduce((a, b) => a + b, 0);
+  return new Chart(document.getElementById(id), {
+    type: "doughnut",
+    data: {
+      labels,
+      datasets: [
+        {
+          data: values,
+          backgroundColor: colors ?? chartColors.slice(0, labels.length),
+          borderColor: "#132232",
+          borderWidth: 2,
+        },
+      ],
+    },
+    options: {
+      plugins: {
+        legend: {
+          position: "bottom",
+          labels: { color: "#e0e6ed", font: { size: 12 }, padding: 12 },
+        },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => {
+              const pct = ((ctx.parsed / total) * 100).toFixed(1);
+              return `${ctx.label}: ${ctx.parsed.toLocaleString()} battles (${pct}%)`;
+            },
+          },
+        },
+      },
+    },
+  });
+}
+
+function updateNationChart(labels, values, colors) {
+  const total = values.reduce((a, b) => a + b, 0);
+  nationChart.data.labels = labels;
+  nationChart.data.datasets[0].data = values;
+  nationChart.data.datasets[0].backgroundColor =
+    colors ?? chartColors.slice(0, labels.length);
+  nationChart.options.plugins.tooltip.callbacks.label = (ctx) => {
+    const pct = ((ctx.parsed / total) * 100).toFixed(1);
+    return `${ctx.label}: ${ctx.parsed.toLocaleString()} battles (${pct}%)`;
+  };
+  nationChart.update();
+}
+
+// aggregates per-ship battle counts by class, nation, tier, and coalition for the given battle-type stats field
+function aggregateShipBattles(ships, pvpKey) {
+  const byClass = {};
+  const byNation = {};
+  const byTierNum = {};
+  const byCoalition = {};
+  ships.forEach((ship) => {
+    const battles = ship[pvpKey]?.battles ?? 0;
+    if (battles === 0) return;
+    if (ship.type) {
+      const t = ship.type === "AirCarrier" ? "Aircraft Carrier" : ship.type;
+      byClass[t] = (byClass[t] ?? 0) + battles;
+    }
+    if (ship.nation) {
+      const n = nationLabel[ship.nation] ?? ship.nation;
+      byNation[n] = (byNation[n] ?? 0) + battles;
+      const c = nationCoalition[ship.nation] ?? ship.nation;
+      byCoalition[c] = (byCoalition[c] ?? 0) + battles;
+    }
+    if (ship.tier) {
+      byTierNum[ship.tier] = (byTierNum[ship.tier] ?? 0) + battles;
+    }
+  });
+  return { byClass, byNation, byTierNum, byCoalition };
+}
+
+// (re)builds the charts and ships table for the given mode's ships data
+function renderShipSection(ships, pvpKey) {
+  const shipsContainer = document.getElementById("ships-container");
+  const { byClass, byNation, byTierNum, byCoalition } = aggregateShipBattles(ships, pvpKey);
+  currentByNation = byNation;
+  currentByCoalition = byCoalition;
+
+  const classLabels = Object.keys(byClass);
+  const classValues = Object.values(byClass);
+  const nationLabels = Object.keys(byNation);
+  const coalitionLabels = Object.keys(byCoalition);
+  const allTiers = Array.from({ length: 11 }, (_, i) => i + 1);
+  const tierValues = allTiers.map((t) => byTierNum[t] ?? 0);
+
+  if (!classChart) {
+    classChart = makeChart("chart-class", classLabels, classValues);
+  } else {
+    const total = classValues.reduce((a, b) => a + b, 0);
+    classChart.data.labels = classLabels;
+    classChart.data.datasets[0].data = classValues;
+    classChart.data.datasets[0].backgroundColor = chartColors.slice(0, classLabels.length);
+    classChart.options.plugins.tooltip.callbacks.label = (ctx) => {
+      const pct = ((ctx.parsed / total) * 100).toFixed(1);
+      return `${ctx.label}: ${ctx.parsed.toLocaleString()} battles (${pct}%)`;
+    };
+    classChart.update();
+  }
+
+  if (!nationChart) {
+    nationChart = makeChart(
+      "chart-nation",
+      nationLabels,
+      Object.values(byNation),
+      nationLabels.map((label) => nationColors[label] ?? "#546e7a"),
+    );
+  } else if (nationView === "nation") {
+    updateNationChart(
+      nationLabels,
+      Object.values(byNation),
+      nationLabels.map((label) => nationColors[label] ?? "#546e7a"),
+    );
+  } else {
+    updateNationChart(
+      coalitionLabels,
+      Object.values(byCoalition),
+      coalitionLabels.map((label) => coalitionColors[label] ?? "#546e7a"),
+    );
+  }
+
+  if (!tierChart) {
+    tierChart = makeBarChart(
+      "chart-tier",
+      allTiers.map((t) => romanNumerals[t - 1]),
+      tierValues,
+    );
+  } else {
+    const total = tierValues.reduce((a, b) => a + b, 0);
+    tierChart.data.datasets[0].data = tierValues;
+    tierChart.options.plugins.tooltip.callbacks.label = (ctx) => {
+      const pct = ((ctx.parsed.y / total) * 100).toFixed(1);
+      return `${ctx.parsed.y.toLocaleString()} battles (${pct}%)`;
+    };
+    tierChart.update();
+  }
+
+  shipsContainer.innerHTML = renderShipsTable(ships, sortCol, sortAsc, pvpKey);
+}
+
+// shows the ships table + charts for the given battle-type mode, using cached data if available
+function renderShipsForMode(mode) {
+  const shipsContainer = document.getElementById("ships-container");
+  const entry = modeCache[mode];
+  if (!entry || !entry.ships) {
+    shipsContainer.innerHTML = `<div class="loading"><div class="spinner"></div><p>Loading ship statistics...</p></div>`;
+    return;
+  }
+  renderShipSection(entry.ships, battleModeConfig[mode].statsField);
+}
+
+const toggleNation = document.getElementById("toggle-nation");
+const toggleCoalition = document.getElementById("toggle-coalition");
+
+toggleNation.addEventListener("click", () => {
+  nationView = "nation";
+  const labels = Object.keys(currentByNation);
+  updateNationChart(
+    labels,
+    Object.values(currentByNation),
+    labels.map((label) => nationColors[label] ?? "#546e7a"),
+  );
+  toggleNation.classList.add("active");
+  toggleCoalition.classList.remove("active");
+});
+
+toggleCoalition.addEventListener("click", () => {
+  nationView = "coalition";
+  const labels = Object.keys(currentByCoalition);
+  updateNationChart(
+    labels,
+    Object.values(currentByCoalition),
+    labels.map((label) => coalitionColors[label] ?? "#546e7a"),
+  );
+  toggleCoalition.classList.add("active");
+  toggleNation.classList.remove("active");
+});
+
+document.getElementById("ships-container").addEventListener("click", (e) => {
+  const th = e.target.closest("th[data-col]");
+  if (!th) return;
+  const entry = modeCache[currentMode];
+  if (!entry || !entry.ships) return;
+
+  const col = th.dataset.col;
+  if (col === sortCol) {
+    sortAsc = !sortAsc;
+  } else {
+    sortCol = col;
+    sortAsc = false;
+  }
+  const pvpKey = battleModeConfig[currentMode].statsField;
+  document.getElementById("ships-container").innerHTML = renderShipsTable(entry.ships, sortCol, sortAsc, pvpKey);
+});
+
 fetch(`/api/player/${username}/ships`)
   .then((r) => r.json())
   .then((data) => {
-    const shipsContainer = document.getElementById("ships-container");
     const ships = data.data[Object.keys(data.data)[0]];
+    modeCache.pvp = { ...modeCache.pvp, ships };
 
-    let sortCol = "battles";
-    let sortAsc = false;
-
-    // aggregate battles by class, nation, tier, and coalition
-    const byClass = {};
-    const byNation = {};
-    const byTierNum = {};
-    const byCoalition = {};
-    ships.forEach((ship) => {
-      const battles = ship.pvp?.battles ?? 0;
-      if (battles === 0) return;
-      if (ship.type) {
-        const t = ship.type === "AirCarrier" ? "Aircraft Carrier" : ship.type;
-        byClass[t] = (byClass[t] ?? 0) + battles;
-      }
-      if (ship.nation) {
-        const n = nationLabel[ship.nation] ?? ship.nation;
-        byNation[n] = (byNation[n] ?? 0) + battles;
-        const c = nationCoalition[ship.nation] ?? ship.nation;
-        byCoalition[c] = (byCoalition[c] ?? 0) + battles;
-      }
-      if (ship.tier) {
-        byTierNum[ship.tier] = (byTierNum[ship.tier] ?? 0) + battles;
-      }
-    });
+    // captain title is always based on overall Random Battles play, regardless of selected mode
+    const { byClass, byCoalition } = aggregateShipBattles(ships, "pvp");
 
     const classLabelMap = {
       Destroyer: "Destroyer",
@@ -686,146 +926,7 @@ fetch(`/api/player/${username}/ships`)
     captainTitle = coalitionPrefix ? `${coalitionPrefix} ${shipTypeTitle}` : shipTypeTitle;
     tryRenderPlayerDetails();
 
-    //code for the charts, uses chart.js to display a doughnut chart of battles by class and nation
-    const chartColors = [
-      "#3498db",
-      "#e74c3c",
-      "#2ecc71",
-      "#f1c40f",
-      "#9b59b6",
-      "#1abc9c",
-      "#e67e22",
-      "#e91e63",
-      "#00bcd4",
-      "#8bc34a",
-      "#ff5722",
-    ];
-
-    const barChartColor = "#3498db";
-
-    function makeBarChart(id, labels, values) {
-      const total = values.reduce((a, b) => a + b, 0);
-      new Chart(document.getElementById(id), {
-        type: "bar",
-        data: {
-          labels,
-          datasets: [
-            {
-              data: values,
-              backgroundColor: barChartColor,
-              borderWidth: 0,
-            },
-          ],
-        },
-        options: {
-          plugins: {
-            legend: { display: false },
-            tooltip: {
-              callbacks: {
-                label: (ctx) => {
-                  const pct = ((ctx.parsed.y / total) * 100).toFixed(1);
-                  return `${ctx.parsed.y.toLocaleString()} battles (${pct}%)`;
-                },
-              },
-            },
-          },
-          scales: {
-            x: { ticks: { color: "#e0e6ed" }, grid: { color: "#1e3448" } },
-            y: { ticks: { color: "#e0e6ed" }, grid: { color: "#1e3448" } },
-          },
-        },
-      });
-    }
-
-    function makeChart(id, labels, values, colors) {
-      const total = values.reduce((a, b) => a + b, 0);
-      return new Chart(document.getElementById(id), {
-        type: "doughnut",
-        data: {
-          labels,
-          datasets: [
-            {
-              data: values,
-              backgroundColor: colors ?? chartColors.slice(0, labels.length),
-              borderColor: "#132232",
-              borderWidth: 2,
-            },
-          ],
-        },
-        options: {
-          plugins: {
-            legend: {
-              position: "bottom",
-              labels: { color: "#e0e6ed", font: { size: 12 }, padding: 12 },
-            },
-            tooltip: {
-              callbacks: {
-                label: (ctx) => {
-                  const pct = ((ctx.parsed / total) * 100).toFixed(1);
-                  return `${ctx.label}: ${ctx.parsed.toLocaleString()} battles (${pct}%)`;
-                },
-              },
-            },
-          },
-        },
-      });
-    }
-
-    makeChart("chart-class", Object.keys(byClass), Object.values(byClass));
-    const nationLabels = Object.keys(byNation);
-    const nationChart = makeChart(
-      "chart-nation",
-      nationLabels,
-      Object.values(byNation),
-      nationLabels.map((label) => nationColors[label] ?? "#546e7a"),
-    );
-
-    const toggleNation = document.getElementById("toggle-nation");
-    const toggleCoalition = document.getElementById("toggle-coalition");
-
-    function updateNationChart(labels, values, colors) {
-      const total = values.reduce((a, b) => a + b, 0);
-      nationChart.data.labels = labels;
-      nationChart.data.datasets[0].data = values;
-      nationChart.data.datasets[0].backgroundColor =
-        colors ?? chartColors.slice(0, labels.length);
-      nationChart.options.plugins.tooltip.callbacks.label = (ctx) => {
-        const pct = ((ctx.parsed / total) * 100).toFixed(1);
-        return `${ctx.label}: ${ctx.parsed.toLocaleString()} battles (${pct}%)`;
-      };
-      nationChart.update();
-    }
-
-    toggleNation.addEventListener("click", () => {
-      const labels = Object.keys(byNation);
-      updateNationChart(
-        labels,
-        Object.values(byNation),
-        labels.map((label) => nationColors[label] ?? "#546e7a"),
-      );
-      toggleNation.classList.add("active");
-      toggleCoalition.classList.remove("active");
-    });
-
-    toggleCoalition.addEventListener("click", () => {
-      const coalitionLabels = Object.keys(byCoalition);
-      updateNationChart(
-        coalitionLabels,
-        Object.values(byCoalition),
-        coalitionLabels.map((label) => coalitionColors[label] ?? "#546e7a"),
-      );
-      toggleCoalition.classList.add("active");
-      toggleNation.classList.remove("active");
-    });
-
-    const allTiers = Array.from({ length: 11 }, (_, i) => i + 1);
-    makeBarChart(
-      "chart-tier",
-      allTiers.map((t) => romanNumerals[t - 1]),
-      allTiers.map((t) => byTierNum[t] ?? 0),
-    );
-
-    shipsContainer.innerHTML = renderShipsTable(ships, sortCol, sortAsc);
+    renderShipSection(ships, "pvp");
 
     fetch(`/api/expected`)
       .then((r) => r.ok ? r.json() : null)
@@ -838,19 +939,6 @@ fetch(`/api/player/${username}/ships`)
         initialPrReady = true;
         tryRenderPlayerDetails();
       });
-
-    shipsContainer.addEventListener("click", (e) => {
-      const th = e.target.closest("th[data-col]");
-      if (!th) return;
-      const col = th.dataset.col;
-      if (col === sortCol) {
-        sortAsc = !sortAsc;
-      } else {
-        sortCol = col;
-        sortAsc = false;
-      }
-      shipsContainer.innerHTML = renderShipsTable(ships, sortCol, sortAsc);
-    });
   })
   .catch((error) => {
     console.error("Error fetching ship stats:", error);
