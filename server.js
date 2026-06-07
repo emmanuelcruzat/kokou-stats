@@ -5,10 +5,6 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(express.static("public"));
-app.use("/api", (req, res, next) => {
-  res.set("Cache-Control", "no-store");
-  next();
-});
 
 // resolves a username to its WoWS account ID via the account search endpoint
 async function getAccountId(username) {
@@ -174,9 +170,6 @@ app.get("/api/player/:username/ships", async (req, res) => {
     );
 
     const ships = shipStatsRes.data.data[accountId];
-    if (!ships) {
-      return res.status(403).json({ error: "Player statistics are hidden" });
-    }
     const shipIds = ships.map((s) => s.ship_id);
 
     // encyclopedia API accepts at most 100 ship IDs per request
