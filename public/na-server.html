@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Kokou Stats</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  </head>
+  <body>
+    <header>
+      <h1><a href="/">KokouStats</a></h1>
+      <nav>
+        <form
+          class="nav-search"
+          id="nav-search-form"
+          action="/player/:username"
+          method="GET"
+        >
+          <input
+            type="text"
+            id="nav-username"
+            name="username"
+            placeholder="Search player..."
+            aria-label="Search player"
+            required
+          />
+          <button type="submit">Search</button>
+        </form>
+        <ul>
+          <li><a href="/">Home</a></li>
+          <li><a href="/about">About</a></li>
+          <li>
+            <a
+              href="https://emmanuelcruzat.github.io/portfolio-dva/"
+              target="_blank"
+              >Contact</a
+            >
+          </li>
+        </ul>
+      </nav>
+    </header>
+
+    <main>
+      <section class="about">
+        <h2>About Kokou Stats</h2>
+        <p>
+          Welcome to Kokou Stats! This is a simple stats tracking application
+          for World of Warships.
+        </p>
+      </section>
+      <div class="charts-grid">
+        <div class="chart-card">
+          <h3>Server Winrate Distribution</h3>
+          <canvas id="chart-winrate-distribution"></canvas>
+        </div>
+      </div>
+    </main>
+
+    <footer>
+      <p>
+        &copy; 2026 KokouStats. All rights reserved. | &copy; 2026
+        Wargaming.net. All rights reserved.
+      </p>
+      <p>
+        This is application is a third-party tool under Wargaming Developers
+        Partner Program.
+      </p>
+    </footer>
+    <script src="/search.js"></script>
+    <script src="/na-server.js"></script>
+  </body>
+</html>
