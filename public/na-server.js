@@ -81,3 +81,31 @@ fetch("/api/na-server/winrate-distribution")
     makeDistributionChart("chart-winrate-distribution", data.labels, data.counts);
   })
   .catch((err) => console.error("Error loading winrate distribution:", err));
+
+fetch("/api/na-server/summary")
+  .then((response) => response.json())
+  .then((data) => {
+    document.getElementById("dash-total-players").textContent =
+      data.totalPlayers.toLocaleString();
+
+    document.getElementById("dash-average-winrate").textContent =
+      `${(data.averageWinrate * 100).toFixed(2)}%`;
+
+    document.getElementById("dash-average-battles").textContent =
+      Math.round(data.averageBattles).toLocaleString();
+
+    const winratePct = data.averageWinrate * 100;
+    const tierColor = winrateTierColor(winratePct);
+
+    const tierEl = document.getElementById("dash-summary-tier");
+    tierEl.textContent = winrateTierLabel(winratePct);
+    tierEl.style.color = tierColor;
+
+    const winrateEl = document.getElementById("dash-summary-winrate");
+    winrateEl.textContent = `${winratePct.toFixed(2)}%`;
+    winrateEl.style.color = tierColor;
+
+    document.getElementById("dash-summary-battles").textContent =
+      Math.round(data.averageBattles).toLocaleString();
+  })
+  .catch((err) => console.error("Error loading NA server summary:", err));

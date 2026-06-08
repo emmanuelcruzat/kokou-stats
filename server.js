@@ -258,6 +258,27 @@ app.get("/api/clan/:clanId", async (req, res) => {
   }
 });
 
+// returns server-wide summary stats for the recorded player winrate sample
+app.get("/api/na-server/summary", async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT count(*) AS total_players,
+              coalesce(avg(winrate), 0) AS average_winrate,
+              coalesce(avg(battles), 0) AS average_battles
+       FROM player_winrates`,
+    );
+    const row = result.rows[0];
+    res.json({
+      totalPlayers: parseInt(row.total_players, 10),
+      averageWinrate: parseFloat(row.average_winrate),
+      averageBattles: parseFloat(row.average_battles),
+    });
+  } catch (err) {
+    console.error("Error fetching NA server summary:", err.message);
+    res.status(500).json({ error: "Failed to fetch NA server summary" });
+  }
+});
+
 // returns a 100-bucket histogram (1% wide buckets) of recorded player winrates
 app.get("/api/na-server/winrate-distribution", async (req, res) => {
   try {
