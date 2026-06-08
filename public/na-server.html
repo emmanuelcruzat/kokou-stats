@@ -4,6 +4,15 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Kokou Stats</title>
+    <script>
+      document.documentElement.setAttribute(
+        "data-theme",
+        localStorage.getItem("kokoustats-theme") ||
+          (window.matchMedia("(prefers-color-scheme: light)").matches
+            ? "light"
+            : "dark"),
+      );
+    </script>
     <link rel="stylesheet" href="/styles.css" />
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   </head>
@@ -39,6 +48,7 @@
             >
           </li>
         </ul>
+        <button id="theme-toggle" class="theme-toggle" type="button"></button>
       </nav>
     </header>
 
@@ -101,11 +111,10 @@
         <h2>Why This Matters</h2>
         <p>
           There are a lot of long-standing theories and debates in the World of
-          Warships community about winrates, matchmaking, and player skill
-          distribution. By collecting and sharing this data, we hope to provide
-          some insight into these questions and foster more informed
-          discussions. Plus, it's just interesting to see how the players on the
-          NA server we call home are doing overall!
+          Warships community about winrates and player skill distribution. By
+          collecting and sharing this data, we hope to provide some insight into
+          these questions and foster more informed discussions. Plus, it's just
+          interesting to see all the data mapped out in one place!
         </p>
       </section>
     </main>
@@ -120,6 +129,7 @@
         Partner Program.
       </p>
     </footer>
+    <script src="/theme.js"></script>
     <script src="/search.js"></script>
     <script src="/na-server.js"></script>
   </body>
