@@ -568,6 +568,12 @@ main {
 
 /* Charts */
 
+.dash-summary {
+  font-size: 1.05rem;
+  color: #e0e6ed;
+  margin: 1.5rem 0;
+}
+
 .charts-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
