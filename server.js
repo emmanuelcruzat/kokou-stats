@@ -1,6 +1,7 @@
 require("dotenv").config();
 const express = require("express");
 const axios = require("axios");
+const { recordWinrate } = require("./db");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -53,6 +54,14 @@ app.get("/api/player/:username", async (req, res) => {
       `https://api.worldofwarships.com/wows/account/info/?application_id=${process.env.WOWS_API_KEY}&account_id=${accountId}`,
     );
     console.log("Account data:", JSON.stringify(accountData.data));
+
+    const pvp = accountData.data.data[accountId]?.statistics?.pvp;
+    if (pvp && pvp.battles > 0) {
+      recordWinrate(username, pvp.wins / pvp.battles, pvp.battles).catch(
+        (err) => console.error("Error recording winrate:", err.message),
+      );
+    }
+
     res.json(accountData.data);
   } catch (err) {
     console.error("Error fetching player stats:", err.message);
