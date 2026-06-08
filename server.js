@@ -1,6 +1,7 @@
 require("dotenv").config();
 const express = require("express");
 const axios = require("axios");
+const { pool, recordWinrate } = require("./db");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -17,6 +18,11 @@ async function getAccountId(username) {
 // route to serve the player stats page
 app.get("/player/:username", async (req, res) => {
   res.sendFile(__dirname + "/public/player.html");
+});
+
+// route to serve the NA server stats page
+app.get("/na-server", async (req, res) => {
+  res.sendFile(__dirname + "/public/na-server.html");
 });
 
 // route to serve the about page
@@ -40,7 +46,7 @@ app.get("/api", (req, res) => {
   res.send("The kokoustats API is running!");
 });
 
-//main player data for ALL random battles
+//main player data for ALL random battles. additionally throws the data into the postgres database
 app.get("/api/player/:username", async (req, res) => {
   try {
     const username = req.params.username;
@@ -49,6 +55,14 @@ app.get("/api/player/:username", async (req, res) => {
       `https://api.worldofwarships.com/wows/account/info/?application_id=${process.env.WOWS_API_KEY}&account_id=${accountId}`,
     );
     console.log("Account data:", JSON.stringify(accountData.data));
+
+    const pvp = accountData.data.data[accountId]?.statistics?.pvp;
+    if (pvp && pvp.battles > 0) {
+      recordWinrate(username, pvp.wins / pvp.battles, pvp.battles).catch(
+        (err) => console.error("Error recording winrate:", err.message),
+      );
+    }
+
     res.json(accountData.data);
   } catch (err) {
     console.error("Error fetching player stats:", err.message);
@@ -160,7 +174,13 @@ app.get("/api/player/:username/ships", async (req, res) => {
     const accountId = await getAccountId(username);
 
     // optional ?extra=pvp_solo|pvp_div2|pvp_div3 to fetch per-ship stats for a specific battle type
-    const allowedExtras = ["pvp_solo", "pvp_div2", "pvp_div3", "rank_solo", "pve"];
+    const allowedExtras = [
+      "pvp_solo",
+      "pvp_div2",
+      "pvp_div3",
+      "rank_solo",
+      "pve",
+    ];
     const extraParam = allowedExtras.includes(req.query.extra)
       ? `&extra=${req.query.extra}`
       : "";
@@ -228,6 +248,49 @@ app.get("/api/clan/:clanId", async (req, res) => {
   } catch (err) {
     console.error("Error fetching clan information:", err.message);
     res.status(500).json({ error: "Failed to fetch clan information" });
+  }
+});
+
+// returns server-wide summary stats for the recorded player winrate sample
+app.get("/api/na-server/summary", async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT count(*) AS total_players,
+              coalesce(avg(winrate), 0) AS average_winrate,
+              coalesce(avg(battles), 0) AS average_battles
+       FROM player_winrates`,
+    );
+    const row = result.rows[0];
+    res.json({
+      totalPlayers: parseInt(row.total_players, 10),
+      averageWinrate: parseFloat(row.average_winrate),
+      averageBattles: parseFloat(row.average_battles),
+    });
+  } catch (err) {
+    console.error("Error fetching NA server summary:", err.message);
+    res.status(500).json({ error: "Failed to fetch NA server summary" });
+  }
+});
+
+// returns a 100-bucket histogram (1% wide buckets) of recorded player winrates
+app.get("/api/na-server/winrate-distribution", async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT LEAST(floor(winrate * 100)::int, 99) AS bucket, count(*) AS count
+       FROM player_winrates
+       GROUP BY bucket`,
+    );
+
+    const counts = new Array(100).fill(0);
+    for (const row of result.rows) {
+      counts[row.bucket] = parseInt(row.count, 10);
+    }
+    const labels = Array.from({ length: 100 }, (_, i) => `${i}%`);
+
+    res.json({ labels, counts });
+  } catch (err) {
+    console.error("Error fetching winrate distribution:", err.message);
+    res.status(500).json({ error: "Failed to fetch winrate distribution" });
   }
 });
 

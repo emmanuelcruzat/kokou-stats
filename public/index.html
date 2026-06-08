@@ -4,6 +4,15 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Kokou Stats</title>
+    <script>
+      document.documentElement.setAttribute(
+        "data-theme",
+        localStorage.getItem("kokoustats-theme") ||
+          (window.matchMedia("(prefers-color-scheme: light)").matches
+            ? "light"
+            : "dark"),
+      );
+    </script>
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
@@ -28,6 +37,7 @@
         </form>
         <ul>
           <li><a href="/">Home</a></li>
+          <li><a href="/na-server">NA Server Stats</a></li>
           <li><a href="/about">About</a></li>
           <li>
             <a
@@ -37,6 +47,7 @@
             >
           </li>
         </ul>
+        <button id="theme-toggle" class="theme-toggle" type="button"></button>
       </nav>
     </header>
 
@@ -61,6 +72,21 @@
       <section class="changelog">
         <h2>Changelog</h2>
         <div class="changelog-list">
+          <div class="changelog-phase-divider"><span>Beta</span></div>
+          <div class="changelog-entry beta">
+            <div class="changelog-version">v0.b.1</div>
+            <div class="changelog-date">2026-06-08</div>
+            <ul class="changelog-items">
+              <li>First beta version: project is mostly feature complete</li>
+              <li>
+                New NA Server Stats page showing the server-wide winrate
+                distribution, average winrate, and average battles played, built
+                from the players looked up on the site
+              </li>
+              <li>Light/dark mode toggle which saves across visits added</li>
+            </ul>
+          </div>
+          <div class="changelog-phase-divider"><span>Alpha</span></div>
           <div class="changelog-entry">
             <div class="changelog-version">v0.a.3</div>
             <div class="changelog-date">2026-06-07</div>
@@ -81,14 +107,14 @@
             <ul class="changelog-items">
               <li>
                 Clan card showing clan name, role, join date, leader, and member
-                count
+                count added
               </li>
               <li>
                 User's main ship class and coalition is now displayed under the
                 username
               </li>
               <li>Chart tooltips now show battle counts with percentages</li>
-              <li>UI improvements</li>
+              <li>General UI improvements and cleanup</li>
             </ul>
           </div>
           <div class="changelog-entry">
@@ -96,17 +122,19 @@
             <div class="changelog-date">2026-05-26</div>
             <ul class="changelog-items">
               <li>
-                Initial release: player stats page with battle record, damage,
-                sinks, and experience cards
+                First alpha version: player stats page with battle record,
+                damage, sinks, and experience cards
               </li>
-              <li>Sortable ship stats table with win rate color coding</li>
+              <li>
+                Sortable ship stats table with win rate color coding added
+              </li>
               <li>
                 Donut charts for battles by class, nation, and coalition; bar
-                chart for battles by tier
+                chart for battles by tier added
               </li>
               <li>
                 WoWS Numbers Personal Rating (PR) and Kokou's Effectiveness
-                Index (KEI)
+                Index (KEI) added
               </li>
             </ul>
           </div>
@@ -125,6 +153,7 @@
       </p>
     </footer>
 
+    <script src="/theme.js"></script>
     <script src="/search.js"></script>
   </body>
 </html>
