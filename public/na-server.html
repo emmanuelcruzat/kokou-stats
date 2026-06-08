@@ -4,6 +4,15 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Kokou Stats</title>
+    <script>
+      document.documentElement.setAttribute(
+        "data-theme",
+        localStorage.getItem("kokoustats-theme") ||
+          (window.matchMedia("(prefers-color-scheme: light)").matches
+            ? "light"
+            : "dark"),
+      );
+    </script>
     <link rel="stylesheet" href="/styles.css" />
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   </head>
@@ -29,6 +38,7 @@
         </form>
         <ul>
           <li><a href="/">Home</a></li>
+          <li><a href="/na-server">NA Server Stats</a></li>
           <li><a href="/about">About</a></li>
           <li>
             <a
@@ -38,15 +48,23 @@
             >
           </li>
         </ul>
+        <button id="theme-toggle" class="theme-toggle" type="button"></button>
       </nav>
     </header>
 
     <main>
       <section class="about">
-        <h2>About Kokou Stats</h2>
+        <h2>NA Server Winrate Distribution</h2>
         <p>
-          Welcome to Kokou Stats! This is a simple stats tracking application
-          for World of Warships.
+          Every time someone looks up a player on KokouStats, that player's
+          overall winrate and battle count gets recorded. The numbers below are
+          built from that growing sample of
+          <strong>looked-up players</strong> on our website.
+        </p>
+        <p>
+          These numbers are <strong>not</strong> a true random sample of the
+          entire NA server population, and are probably skewed toward more
+          active or more frequently searched players.
         </p>
       </section>
       <p class="dash-summary">
@@ -57,24 +75,26 @@
       </p>
       <div class="charts-grid">
         <div class="stat-card">
-          <div class="winrate-display" style="color:#c9a84c">
-            <div class="metric-label">Total Players</div>
+          <div class="winrate-display" style="color: #c9a84c">
+            <div class="metric-label">
+              Total Players in the KokouStats Database
+            </div>
             <div class="winrate-top">
               <div class="winrate-pct" id="dash-total-players">--</div>
             </div>
           </div>
         </div>
         <div class="stat-card">
-          <div class="winrate-display" style="color:#c9a84c">
-            <div class="metric-label">Average Winrate</div>
+          <div class="winrate-display" style="color: #c9a84c">
+            <div class="metric-label">NA Average Winrate</div>
             <div class="winrate-top">
               <div class="winrate-pct" id="dash-average-winrate">--</div>
             </div>
           </div>
         </div>
         <div class="stat-card">
-          <div class="winrate-display" style="color:#c9a84c">
-            <div class="metric-label">Average Battles Played</div>
+          <div class="winrate-display" style="color: #c9a84c">
+            <div class="metric-label">NA Average Battles Played</div>
             <div class="winrate-top">
               <div class="winrate-pct" id="dash-average-battles">--</div>
             </div>
@@ -83,10 +103,20 @@
       </div>
       <div class="charts-grid">
         <div class="chart-card">
-          <h3>Server Winrate Distribution</h3>
+          <h3>NA Server Winrate Distribution</h3>
           <canvas id="chart-winrate-distribution"></canvas>
         </div>
       </div>
+      <section>
+        <h2>Why This Matters</h2>
+        <p>
+          There are a lot of long-standing theories and debates in the World of
+          Warships community about winrates and player skill distribution. By
+          collecting and sharing this data, we hope to provide some insight into
+          these questions and foster more informed discussions. Plus, it's just
+          interesting to see all the data mapped out in one place!
+        </p>
+      </section>
     </main>
 
     <footer>
@@ -99,6 +129,7 @@
         Partner Program.
       </p>
     </footer>
+    <script src="/theme.js"></script>
     <script src="/search.js"></script>
     <script src="/na-server.js"></script>
   </body>
