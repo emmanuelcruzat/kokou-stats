@@ -281,9 +281,18 @@ main {
 
 
 #clan-tag {
-  color: #4fc3f7;
   font-weight: 700;
   margin-right: 0.3em;
+}
+
+#clan-tag a {
+  color: #4fc3f7;
+  text-decoration: none;
+  transition: color 0.15s;
+}
+
+#clan-tag a:hover {
+  color: var(--accent);
 }
 
 .header-row {
@@ -401,6 +410,7 @@ main {
 .player-header:hover,
 .chart-card:hover,
 #ships-container:hover,
+#members-container:hover,
 .changelog:hover {
   box-shadow: 0 0 16px rgba(201, 168, 76, 0.15);
   border-color: rgba(201, 168, 76, 0.3);
@@ -731,14 +741,16 @@ main {
 
 /* Ships table */
 
-#ships-container {
+#ships-container,
+#members-container {
   background-color: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 2rem;
 }
 
-#ships-container h2 {
+#ships-container h2,
+#members-container h2 {
   color: var(--accent);
   margin-bottom: 1.25rem;
   font-size: 1.4rem;

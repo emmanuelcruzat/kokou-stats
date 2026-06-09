@@ -6,12 +6,14 @@ const row = (label, value) =>
   `<div class="stat-row"><span class="stat-label">${label}</span><span class="stat-value">${value}</span></div>`;
 
 let resolvedClanTag = null;
+let resolvedClanId = null;
 let clanPayload = null;
 
-function applyClanTag(tag) {
+function applyClanTag(tag, id) {
   resolvedClanTag = tag;
+  resolvedClanId = id;
   const el = document.getElementById("clan-tag");
-  if (el) el.textContent = `[${tag}]`;
+  if (el) el.innerHTML = `<a href="/clan/${id}" class="clan-leader-link">[${tag}]</a>`;
 }
 
 const clanItem = (label, value) =>
@@ -59,7 +61,7 @@ function tryRenderPlayerDetails() {
 
   document.getElementById("player-header-container").innerHTML = `
     <div class="player-header">
-      <h2><span id="clan-tag">${resolvedClanTag ? `[${resolvedClanTag}]` : ""}</span>${accountData.nickname}</h2>
+      <h2><span id="clan-tag">${resolvedClanTag ? `<a href="/clan/${resolvedClanId}" class="clan-leader-link">[${resolvedClanTag}]</a>` : ""}</span>${accountData.nickname}</h2>
       <div id="captain-title" class="captain-title">${captainTitle}</div>
       <div class="player-meta">
         <span>Last Battle: ${new Date(accountData.last_battle_time * 1000).toLocaleString()}</span>
@@ -207,7 +209,7 @@ function tryClanRender() {
   clanCard.innerHTML = `
     <h3>Clan</h3>
     <div class="clan-row">
-      ${clanItem("Name", `[${clan.tag}] ${clan.name}`)}
+      ${clanItem("Name", `<a href="/clan/${clanPayload.clan_id}" class="clan-leader-link">[${clan.tag}] ${clan.name}</a>`)}
       ${clanItem("Role", roleLabel[role] ?? role)}
       ${clanItem("Joined", new Date(joined_at * 1000).toLocaleDateString())}
       <div class="clan-divider"></div>
@@ -959,8 +961,8 @@ fetch(`/api/player/${username}/clan`)
     const clanData = await clanRes.json();
     const details = clanData.data[clan_id];
 
-    applyClanTag(clan.tag);
-    clanPayload = { clan, details, role, joined_at };
+    applyClanTag(clan.tag, clan_id);
+    clanPayload = { clan, clan_id, details, role, joined_at };
     tryClanRender();
   })
   .catch((err) => console.error("Error fetching clan data:", err));

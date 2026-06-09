@@ -24,6 +24,11 @@ app.get("/player/:username", async (req, res) => {
   res.sendFile(__dirname + "/public/player.html");
 });
 
+//route to serve the clan stats page
+app.get("/clan/:clanId", async (req, res) => {
+  res.sendFile(__dirname + "/public/clan.html");
+});
+
 // route to serve the NA server stats page
 app.get("/na-server", async (req, res) => {
   res.sendFile(__dirname + "/public/na-server.html");
@@ -249,7 +254,7 @@ app.get("/api/clan/:clanId", async (req, res) => {
   try {
     const clanId = req.params.clanId;
     const clanRes = await axios.get(
-      `https://api.worldofwarships.com/wows/clans/info/?application_id=${process.env.WOWS_API_KEY}&clan_id=${clanId}`,
+      `https://api.worldofwarships.com/wows/clans/info/?application_id=${process.env.WOWS_API_KEY}&clan_id=${clanId}&extra=members`,
     );
     res.json(clanRes.data);
   } catch (err) {
