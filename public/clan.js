@@ -58,6 +58,34 @@ function getSortVal(member, key) {
   }
 }
 
+function renderClanStats() {
+  const section = document.getElementById("clan-stats");
+  const tracked = allMembers.filter((m) => m.winrate != null);
+  if (tracked.length === 0) return;
+
+  const avgWr = (tracked.reduce((sum, m) => sum + m.winrate, 0) / tracked.length) * 100;
+  const avgBattles = tracked.reduce((sum, m) => sum + m.battles, 0) / tracked.length;
+  const avgDmg = tracked.reduce((sum, m) => sum + (m.battles > 0 ? m.damage_dealt / m.battles : 0), 0) / tracked.length;
+
+  const stat = (label, value, color) => `
+    <div class="stat-card">
+      <h3 style="border-bottom:none;margin-bottom:0.5rem">${label}</h3>
+      <div class="winrate-display" style="border-bottom:none;margin-bottom:0${color ? `;color:${color}` : ""}">
+        <div class="metric-pct">${value}</div>
+      </div>
+    </div>
+  `;
+
+  section.innerHTML = `
+    <div class="stat-grid" style="grid-template-columns: repeat(3, 1fr)">
+      ${stat("Avg. Win Rate", avgWr.toFixed(2) + "%", wrColor(avgWr))}
+      ${stat("Avg. Damage", Math.round(avgDmg).toLocaleString())}
+      ${stat("Avg. Battles", Math.round(avgBattles).toLocaleString())}
+    </div>
+  `;
+  section.style.display = "";
+}
+
 function renderMembersTable() {
   const container = document.getElementById("members-container");
   const sorted = [...allMembers].sort((a, b) => {
@@ -124,7 +152,7 @@ clanPromise
     const clan = data.data[clanId];
     if (!clan) throw new Error("Clan not found");
 
-    document.title = `[${clan.tag}] ${clan.name} — KokouStats`;
+    document.title = `[${clan.tag}] ${clan.name} - KokouStats`;
     const created = new Date(clan.created_at * 1000).toLocaleDateString();
 
     document.getElementById("clan-header-container").innerHTML = `
@@ -169,7 +197,10 @@ Promise.all([clanPromise, statsPromise])
       ...m,
       winrate: stats[m.account_id]?.winrate ?? null,
       battles: stats[m.account_id]?.battles ?? 0,
+      damage_dealt: stats[m.account_id]?.damage_dealt ?? 0,
     }));
+
+    renderClanStats();
 
     const membersSection = document.getElementById("members-container");
     membersSection.style.display = "";

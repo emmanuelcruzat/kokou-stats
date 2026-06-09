@@ -401,6 +401,7 @@ main {
 .player-header,
 .chart-card,
 #ships-container,
+#members-container,
 .changelog {
   transition: box-shadow 0.2s, border-color 0.2s;
 }

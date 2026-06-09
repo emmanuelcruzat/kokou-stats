@@ -281,7 +281,7 @@ app.get("/api/clan/:clanId/members/stats", async (req, res) => {
     for (let i = 0; i < accountIds.length; i += 100) {
       const chunk = accountIds.slice(i, i + 100).join(",");
       const accountRes = await axios.get(
-        `https://api.worldofwarships.com/wows/account/info/?application_id=${process.env.WOWS_API_KEY}&account_id=${chunk}&fields=statistics.pvp.battles,statistics.pvp.wins`,
+        `https://api.worldofwarships.com/wows/account/info/?application_id=${process.env.WOWS_API_KEY}&account_id=${chunk}&fields=statistics.pvp.battles,statistics.pvp.wins,statistics.pvp.damage_dealt`,
       );
       Object.assign(statsMap, accountRes.data.data);
     }
@@ -296,7 +296,7 @@ app.get("/api/clan/:clanId/members/stats", async (req, res) => {
           console.error("Error recording winrate:", err.message),
         );
       }
-      result[member.account_id] = { battles, winrate };
+      result[member.account_id] = { battles, winrate, damage_dealt: pvp?.damage_dealt ?? 0 };
     }
 
     res.json({ data: result });

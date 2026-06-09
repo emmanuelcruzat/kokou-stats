@@ -59,6 +59,7 @@ const battleModeLabels = {
 function tryRenderPlayerDetails() {
   if (!accountData || captainTitle === null || !initialPrReady) return;
 
+  document.title = `${accountData.nickname} - KokouStats`;
   document.getElementById("player-header-container").innerHTML = `
     <div class="player-header">
       <h2><span id="clan-tag">${resolvedClanTag ? `<a href="/clan/${resolvedClanId}" class="clan-leader-link">[${resolvedClanTag}]</a>` : ""}</span>${accountData.nickname}</h2>
