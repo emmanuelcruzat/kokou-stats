@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Kokou Stats</title>
+    <script>
+      document.documentElement.setAttribute(
+        "data-theme",
+        localStorage.getItem("kokoustats-theme") ||
+          (window.matchMedia("(prefers-color-scheme: light)").matches
+            ? "light"
+            : "dark"),
+      );
+    </script>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header>
+      <h1><a href="/">KokouStats</a></h1>
+      <nav>
+        <form
+          class="nav-search"
+          id="nav-search-form"
+          action="/player/:username"
+          method="GET"
+        >
+          <input
+            type="text"
+            id="nav-username"
+            name="username"
+            placeholder="Search player..."
+            aria-label="Search player"
+            required
+          />
+          <button type="submit">Search</button>
+        </form>
+        <ul>
+          <li><a href="/">Home</a></li>
+          <li><a href="/na-server">NA Server Stats</a></li>
+          <li><a href="/about">About</a></li>
+          <li>
+            <a
+              href="https://emmanuelcruzat.github.io/portfolio-dva/"
+              target="_blank"
+              >Contact</a
+            >
+          </li>
+        </ul>
+        <button id="theme-toggle" class="theme-toggle" type="button"></button>
+      </nav>
+    </header>
+
+    <main>
+      <section id="clan-header-container">
+        <div class="loading">
+          <div class="spinner"></div>
+          <p>Loading clan...</p>
+        </div>
+      </section>
+
+      <section class="error-message" style="display: none">
+        <h2>Error</h2>
+        <p>Unable to load clan information. Please try again later.</p>
+      </section>
+
+      <section id="clan-stats" style="display: none"></section>
+
+      <section id="members-container" style="display: none">
+        <h2>Members</h2>
+        <div class="loading">
+          <div class="spinner"></div>
+          <p>Loading members...</p>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <p>
+        &copy; 2026 KokouStats. All rights reserved. | &copy; 2026
+        Wargaming.net. All rights reserved.
+      </p>
+      <p>
+        This is application is a third-party tool under Wargaming Developers
+        Partner Program.
+      </p>
+    </footer>
+    <script src="/theme.js"></script>
+    <script src="/search.js"></script>
+    <script src="/clan.js"></script>
+  </body>
+</html>

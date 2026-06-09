@@ -20,6 +20,11 @@ app.get("/player/:username", async (req, res) => {
   res.sendFile(__dirname + "/public/player.html");
 });
 
+//route to serve the clan stats page
+app.get("/clan/:clanId", async (req, res) => {
+  res.sendFile(__dirname + "/public/clan.html");
+});
+
 // route to serve the NA server stats page
 app.get("/na-server", async (req, res) => {
   res.sendFile(__dirname + "/public/na-server.html");
@@ -242,12 +247,55 @@ app.get("/api/clan/:clanId", async (req, res) => {
   try {
     const clanId = req.params.clanId;
     const clanRes = await axios.get(
-      `https://api.worldofwarships.com/wows/clans/info/?application_id=${process.env.WOWS_API_KEY}&clan_id=${clanId}`,
+      `https://api.worldofwarships.com/wows/clans/info/?application_id=${process.env.WOWS_API_KEY}&clan_id=${clanId}&extra=members`,
     );
     res.json(clanRes.data);
   } catch (err) {
     console.error("Error fetching clan information:", err.message);
     res.status(500).json({ error: "Failed to fetch clan information" });
+  }
+});
+
+// fetches pvp winrate + battles for every clan member and records them in the DB
+app.get("/api/clan/:clanId/members/stats", async (req, res) => {
+  try {
+    const clanId = req.params.clanId;
+
+    const clanRes = await axios.get(
+      `https://api.worldofwarships.com/wows/clans/info/?application_id=${process.env.WOWS_API_KEY}&clan_id=${clanId}&extra=members`,
+    );
+    const clan = clanRes.data.data[clanId];
+    if (!clan?.members) return res.json({ data: {} });
+
+    const members = Object.values(clan.members);
+    const accountIds = members.map((m) => m.account_id);
+
+    const statsMap = {};
+    for (let i = 0; i < accountIds.length; i += 100) {
+      const chunk = accountIds.slice(i, i + 100).join(",");
+      const accountRes = await axios.get(
+        `https://api.worldofwarships.com/wows/account/info/?application_id=${process.env.WOWS_API_KEY}&account_id=${chunk}&fields=statistics.pvp.battles,statistics.pvp.wins,statistics.pvp.damage_dealt`,
+      );
+      Object.assign(statsMap, accountRes.data.data);
+    }
+
+    const result = {};
+    for (const member of members) {
+      const pvp = statsMap[member.account_id]?.statistics?.pvp;
+      const battles = pvp?.battles ?? 0;
+      const winrate = battles > 0 ? pvp.wins / pvp.battles : null;
+      if (battles > 0) {
+        recordWinrate(member.account_name, winrate, battles).catch((err) =>
+          console.error("Error recording winrate:", err.message),
+        );
+      }
+      result[member.account_id] = { battles, winrate, damage_dealt: pvp?.damage_dealt ?? 0 };
+    }
+
+    res.json({ data: result });
+  } catch (err) {
+    console.error("Error fetching clan member stats:", err.message);
+    res.status(500).json({ error: "Failed to fetch clan member stats" });
   }
 });
 

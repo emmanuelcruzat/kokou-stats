@@ -53,7 +53,7 @@
 
     <main>
       <section class="hero">
-        <h2>Welcome to Kokou Stats</h2>
+        <h2>Welcome to KokouStats</h2>
         <p>
           Your go-to source for your World of Warships statistics. Created by
           one of the destroyer captains of all time.
@@ -74,70 +74,92 @@
         <div class="changelog-list">
           <div class="changelog-phase-divider"><span>Beta</span></div>
           <div class="changelog-entry beta">
-            <div class="changelog-version">v0.b.1</div>
-            <div class="changelog-date">2026-06-08</div>
-            <ul class="changelog-items">
-              <li>First beta version: project is mostly feature complete</li>
-              <li>
-                New NA Server Stats page showing the server-wide winrate
-                distribution, average winrate, and average battles played, built
-                from the players looked up on the site
-              </li>
-              <li>Light/dark mode toggle which saves across visits added</li>
-            </ul>
-          </div>
-          <div class="changelog-phase-divider"><span>Alpha</span></div>
-          <div class="changelog-entry">
-            <div class="changelog-version">v0.a.3</div>
-            <div class="changelog-date">2026-06-07</div>
+            <div class="changelog-version">v0.b.2</div>
+            <div class="changelog-date">2026-06-09</div>
             <ul class="changelog-items">
               <li>
-                Can now select battle type for stats (Random, Solo, Duo
-                Division, Trio Division, Ranked, Co-Op)
+                New clan page showing clan summary, member stats mini-dashboard,
+                and a sortable members table with winrates and battles added
               </li>
               <li>
-                Added "?" links next to PR and KEI explaining what each metric
-                means, including a new dedicated KEI page
+                Clan tag and name on the player page now link to the clan page
               </li>
             </ul>
           </div>
-          <div class="changelog-entry">
-            <div class="changelog-version">v0.a.2</div>
-            <div class="changelog-date">2026-05-27</div>
-            <ul class="changelog-items">
-              <li>
-                Clan card showing clan name, role, join date, leader, and member
-                count added
-              </li>
-              <li>
-                User's main ship class and coalition is now displayed under the
-                username
-              </li>
-              <li>Chart tooltips now show battle counts with percentages</li>
-              <li>General UI improvements and cleanup</li>
-            </ul>
+          <div id="changelog-older" hidden>
+            <div class="changelog-entry beta">
+              <div class="changelog-version">v0.b.1</div>
+              <div class="changelog-date">2026-06-08</div>
+              <ul class="changelog-items">
+                <li>First beta version: project is mostly feature complete</li>
+                <li>
+                  New NA Server Stats page showing the server-wide winrate
+                  distribution, average winrate, and average battles played,
+                  built from the players looked up on the site
+                </li>
+                <li>Light/dark mode toggle which saves across visits added</li>
+              </ul>
+            </div>
+            <div class="changelog-phase-divider"><span>Alpha</span></div>
+            <div class="changelog-entry">
+              <div class="changelog-version">v0.a.3</div>
+              <div class="changelog-date">2026-06-07</div>
+              <ul class="changelog-items">
+                <li>
+                  Can now select battle type for stats (Random, Solo, Duo
+                  Division, Trio Division, Ranked, Co-Op)
+                </li>
+                <li>
+                  Added "?" links next to PR and KEI explaining what each metric
+                  means, including a new dedicated KEI page
+                </li>
+              </ul>
+            </div>
+            <div class="changelog-entry">
+              <div class="changelog-version">v0.a.2</div>
+              <div class="changelog-date">2026-05-27</div>
+              <ul class="changelog-items">
+                <li>
+                  Clan card showing clan name, role, join date, leader, and
+                  member count added
+                </li>
+                <li>
+                  User's main ship class and coalition is now displayed under
+                  the username
+                </li>
+                <li>Chart tooltips now show battle counts with percentages</li>
+                <li>General UI improvements and cleanup</li>
+              </ul>
+            </div>
+            <div class="changelog-entry">
+              <div class="changelog-version">v0.a.1</div>
+              <div class="changelog-date">2026-05-26</div>
+              <ul class="changelog-items">
+                <li>
+                  First alpha version: player stats page with battle record,
+                  damage, sinks, and experience cards
+                </li>
+                <li>
+                  Sortable ship stats table with win rate color coding added
+                </li>
+                <li>
+                  Donut charts for battles by class, nation, and coalition; bar
+                  chart for battles by tier added
+                </li>
+                <li>
+                  WoWS Numbers Personal Rating (PR) and Kokou's Effectiveness
+                  Index (KEI) added
+                </li>
+              </ul>
+            </div>
           </div>
-          <div class="changelog-entry">
-            <div class="changelog-version">v0.a.1</div>
-            <div class="changelog-date">2026-05-26</div>
-            <ul class="changelog-items">
-              <li>
-                First alpha version: player stats page with battle record,
-                damage, sinks, and experience cards
-              </li>
-              <li>
-                Sortable ship stats table with win rate color coding added
-              </li>
-              <li>
-                Donut charts for battles by class, nation, and coalition; bar
-                chart for battles by tier added
-              </li>
-              <li>
-                WoWS Numbers Personal Rating (PR) and Kokou's Effectiveness
-                Index (KEI) added
-              </li>
-            </ul>
-          </div>
+          <button
+            id="changelog-toggle"
+            class="toggle-btn"
+            style="margin-top: 1rem"
+          >
+            Show full changelog
+          </button>
         </div>
       </section>
     </main>
@@ -155,5 +177,16 @@
 
     <script src="/theme.js"></script>
     <script src="/search.js"></script>
+    <script>
+      const changelogToggle = document.getElementById("changelog-toggle");
+      const changelogOlder = document.getElementById("changelog-older");
+      changelogToggle.addEventListener("click", () => {
+        const expanded = !changelogOlder.hidden;
+        changelogOlder.hidden = expanded;
+        changelogToggle.textContent = expanded
+          ? "Show full changelog"
+          : "Show less";
+      });
+    </script>
   </body>
 </html>
