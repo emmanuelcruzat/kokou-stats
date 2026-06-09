@@ -18,6 +18,24 @@ const roleOrder = {
   private: 5,
 };
 
+function wrColor(rate) {
+  return rate >= 65
+    ? "#a855f7"
+    : rate >= 60
+      ? "#9b59b6"
+      : rate >= 56
+        ? "#3498db"
+        : rate >= 54
+          ? "#1abc9c"
+          : rate >= 52
+            ? "#2ecc71"
+            : rate >= 49
+              ? "#f1c40f"
+              : rate >= 47
+                ? "#e67e22"
+                : "#e74c3c";
+}
+
 let allMembers = [];
 let sortCol = "role";
 let sortAsc = true;
@@ -25,17 +43,18 @@ let sortAsc = true;
 const columns = [
   { key: "account_name", label: "Player" },
   { key: "role", label: "Role" },
+  { key: "battles", label: "Battles" },
+  { key: "winrate", label: "Win Rate" },
   { key: "joined_at", label: "Joined" },
 ];
 
 function getSortVal(member, key) {
   switch (key) {
-    case "account_name":
-      return member.account_name.toLowerCase();
-    case "role":
-      return roleOrder[member.role] ?? 99;
-    case "joined_at":
-      return member.joined_at;
+    case "account_name": return member.account_name.toLowerCase();
+    case "role": return roleOrder[member.role] ?? 99;
+    case "winrate": return member.winrate ?? -1;
+    case "battles": return member.battles ?? 0;
+    case "joined_at": return member.joined_at;
   }
 }
 
@@ -57,15 +76,20 @@ function renderMembersTable() {
     .join("");
 
   const rows = sorted
-    .map(
-      (m) => `
-    <tr>
-      <td><a href="/player/${m.account_name}" class="clan-leader-link">${m.account_name}</a></td>
-      <td>${roleLabel[m.role] ?? m.role}</td>
-      <td>${new Date(m.joined_at * 1000).toLocaleDateString()}</td>
-    </tr>
-  `,
-    )
+    .map((m) => {
+      const wr = m.winrate != null ? (m.winrate * 100).toFixed(2) + "%" : `<span class="placeholder">--</span>`;
+      const wrStyle = m.winrate != null ? `style="color:${wrColor(m.winrate * 100)}"` : "";
+      const battles = m.battles > 0 ? m.battles.toLocaleString() : `<span class="placeholder">--</span>`;
+      return `
+        <tr>
+          <td><a href="/player/${m.account_name}" class="clan-leader-link">${m.account_name}</a></td>
+          <td>${roleLabel[m.role] ?? m.role}</td>
+          <td>${battles}</td>
+          <td ${wrStyle}>${wr}</td>
+          <td>${new Date(m.joined_at * 1000).toLocaleDateString()}</td>
+        </tr>
+      `;
+    })
     .join("");
 
   container.innerHTML = `
@@ -86,20 +110,21 @@ function renderMembersTable() {
       sortAsc = !sortAsc;
     } else {
       sortCol = col;
-      sortAsc = true;
+      sortAsc = col === "role";
     }
     renderMembersTable();
   }, { once: true });
 }
 
-fetch(`/api/clan/${clanId}`)
-  .then((r) => r.json())
+const clanPromise = fetch(`/api/clan/${clanId}`).then((r) => r.json());
+const statsPromise = fetch(`/api/clan/${clanId}/members/stats`).then((r) => r.json());
+
+clanPromise
   .then((data) => {
     const clan = data.data[clanId];
     if (!clan) throw new Error("Clan not found");
 
     document.title = `[${clan.tag}] ${clan.name} — KokouStats`;
-
     const created = new Date(clan.created_at * 1000).toLocaleDateString();
 
     document.getElementById("clan-header-container").innerHTML = `
@@ -126,14 +151,35 @@ fetch(`/api/clan/${clanId}`)
       </div>
     `;
 
-    allMembers = clan.members ? Object.values(clan.members) : [];
+    return clan;
+  })
+  .catch((err) => {
+    console.error("Error fetching clan data:", err);
+    document.getElementById("clan-header-container").innerHTML = "";
+    document.querySelector(".error-message").style.display = "";
+  });
+
+Promise.all([clanPromise, statsPromise])
+  .then(([clanData, statsData]) => {
+    const clan = clanData.data[clanId];
+    if (!clan?.members) return;
+
+    const stats = statsData.data ?? {};
+    allMembers = Object.values(clan.members).map((m) => ({
+      ...m,
+      winrate: stats[m.account_id]?.winrate ?? null,
+      battles: stats[m.account_id]?.battles ?? 0,
+    }));
 
     const membersSection = document.getElementById("members-container");
     membersSection.style.display = "";
     renderMembersTable();
   })
   .catch((err) => {
-    console.error("Error fetching clan data:", err);
-    document.getElementById("clan-header-container").innerHTML = "";
-    document.querySelector(".error-message").style.display = "";
+    console.error("Error loading member stats:", err);
+    document.getElementById("members-container").innerHTML = `
+      <h2>Members</h2>
+      <p style="color:var(--error-text)">Failed to load member stats.</p>
+    `;
+    document.getElementById("members-container").style.display = "";
   });
