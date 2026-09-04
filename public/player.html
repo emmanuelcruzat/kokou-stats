@@ -53,17 +53,21 @@
     </header>
 
     <main>
-      <section id="stats-container">
-        <div class="header-row">
-          <div id="player-header-container">
-            <div class="loading">
-              <div class="spinner"></div>
-              <p>Loading player...</p>
-            </div>
+      <div class="header-row">
+        <div id="player-header-container">
+          <div class="loading">
+            <div class="spinner"></div>
+            <p>Loading player...</p>
           </div>
-          <div id="clan-card" class="stat-card" style="display: none"></div>
         </div>
-        <p class="range-note" id="next-update-note"></p>
+        <div id="clan-card" class="stat-card" style="display: none"></div>
+      </div>
+
+      <section id="stats-container" class="page-section">
+        <div class="section-header-row">
+          <h3 class="section-subtitle">Service Record</h3>
+          <p class="range-note" id="next-update-note"></p>
+        </div>
         <div class="battle-type-rack" id="mode-toggle">
           <button class="battle-type-btn active" data-mode="pvp">
             Random Battles
@@ -82,13 +86,20 @@
             Co-Op Battles
           </button>
         </div>
-        <div class="stat-card" id="service-record-card">
-          <h3>Service Record</h3>
+        <div id="service-record-card">
           <div class="overall-hero" id="overall-hero"></div>
           <div class="range-panel" id="range-toggle"></div>
         </div>
-        <div class="chart-card" id="charts-card">
-          <h3>Charts</h3>
+      </section>
+
+      <section class="error-message" style="display: none">
+        <h2>Error</h2>
+        <p>Unable to load player statistics. Please try again later.</p>
+      </section>
+
+      <section class="page-section">
+        <h2 class="section-title">Charts &amp; Graphs</h2>
+        <div id="charts-card">
           <div class="charts-grid">
             <div class="chart-sub">
               <h4>WR</h4>
@@ -108,37 +119,34 @@
             </div>
           </div>
         </div>
-      </section>
-      <section class="error-message" style="display: none">
-        <h2>Error</h2>
-        <p>Unable to load player statistics. Please try again later.</p>
-      </section>
-      <div class="charts-grid">
-        <div class="chart-card">
-          <h3>Battles by Ship Class</h3>
-          <canvas id="chart-class"></canvas>
-        </div>
-        <div class="chart-card">
-          <div class="chart-card-header">
-            <h3>Battles by Nation</h3>
-            <div class="chart-toggle">
-              <button class="toggle-btn active" id="toggle-nation">
-                Nation
-              </button>
-              <button class="toggle-btn" id="toggle-coalition">
-                Coalition
-              </button>
-            </div>
+        <div class="charts-grid">
+          <div class="chart-sub">
+            <h4>Battles by Ship Class</h4>
+            <canvas id="chart-class"></canvas>
           </div>
-          <canvas id="chart-nation"></canvas>
+          <div class="chart-sub">
+            <div class="chart-sub-header">
+              <h4>Battles by Nation</h4>
+              <div class="chart-toggle">
+                <button class="toggle-btn active" id="toggle-nation">
+                  Nation
+                </button>
+                <button class="toggle-btn" id="toggle-coalition">
+                  Coalition
+                </button>
+              </div>
+            </div>
+            <canvas id="chart-nation"></canvas>
+          </div>
+          <div class="chart-sub">
+            <h4>Battles by Tier</h4>
+            <canvas id="chart-tier"></canvas>
+          </div>
         </div>
-        <div class="chart-card">
-          <h3>Battles by Tier</h3>
-          <canvas id="chart-tier"></canvas>
-        </div>
-      </div>
-      <section id="ships-container">
-        <h2>Ships</h2>
+      </section>
+
+      <section id="ships-container" class="page-section">
+        <h2 class="section-title">Ships</h2>
         <div class="loading">
           <div class="spinner"></div>
           <p>Loading ship statistics...</p>

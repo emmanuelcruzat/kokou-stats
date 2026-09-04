@@ -258,19 +258,80 @@ main {
   background-color: var(--accent-hover);
 }
 
-/* Player stats page */
+/* Player stats page — the page is three colored sections (profile through Service
+   Record, Charts & Graphs, Ships), each one card. Content inside a section uses simple
+   dividers rather than its own nested card, to keep the page from turning into boxes
+   full of boxes. */
 
-#stats-container {
+.page-section {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
-}
-
-.player-header {
+  gap: 1.25rem;
   background-color: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: 8px;
-  padding: 1.75rem 2rem;
+  padding: 1.5rem 1.75rem;
+  margin-bottom: 1.5rem;
+}
+
+.section-title {
+  color: var(--accent);
+  font-size: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.section-subtitle {
+  color: var(--accent);
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.section-header-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.section-header-row .range-note {
+  padding: 0;
+  text-align: right;
+}
+
+/* player identity: name, title, tags, and Clan — its own plain (uncolored) card, separate
+   from the three colored sections below it */
+.header-row {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1.5rem 1.75rem;
+  margin-bottom: 1.5rem;
+}
+
+/* flattens sub-blocks (Clan card, Service Record) that used to be their own nested card,
+   now that the section around them already provides one */
+.header-row .stat-card,
+.page-section .stat-card,
+#service-record-card {
+  background: none;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  border-top: 1px solid var(--border);
+  padding-top: 1.25rem;
+}
+
+.player-header {
+  padding: 0;
 }
 
 .player-header h2 {
@@ -337,18 +398,10 @@ main {
   gap: 0.75rem;
 }
 
-tr.range-row {
-  cursor: pointer;
-}
-
 tr.range-row.active {
   background-color: var(--bg-hover);
-  box-shadow: inset 3px 0 0 var(--accent);
 }
 
-tr.range-row.locked {
-  cursor: default;
-}
 
 tr.range-row.locked td {
   color: var(--text-faint);
@@ -486,26 +539,6 @@ tr.range-row.locked td {
   gap: 1rem;
 }
 
-.stat-card,
-.search,
-.player-header,
-.chart-card,
-#ships-container,
-#members-container,
-.changelog {
-  transition: box-shadow 0.2s, border-color 0.2s;
-}
-
-.stat-card:hover,
-.search:hover,
-.player-header:hover,
-.chart-card:hover,
-#ships-container:hover,
-#members-container:hover,
-.changelog:hover {
-  box-shadow: 0 0 16px rgba(201, 168, 76, 0.15);
-  border-color: rgba(201, 168, 76, 0.3);
-}
 
 .stat-card {
   background-color: var(--bg-surface);
@@ -859,13 +892,33 @@ tr.range-row.locked td {
 .chart-sub h4 {
   font-size: 0.85rem;
   font-weight: 600;
-  color: var(--text-secondary);
+  color: var(--accent);
   margin-bottom: 0.75rem;
 }
 
-/* Ships table */
+.chart-sub-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
 
-#ships-container,
+.chart-sub-header h4 {
+  margin-bottom: 0;
+}
+
+/* Ships table — box comes from .page-section.section-ships; this just styles the heading,
+   which also covers the "Ship Stats" heading the ships table swaps in once loaded */
+#ships-container h2 {
+  color: var(--accent);
+  font-size: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 0;
+}
+
 #members-container {
   background-color: var(--bg-surface);
   border: 1px solid var(--border);
@@ -873,7 +926,6 @@ tr.range-row.locked td {
   padding: 2rem;
 }
 
-#ships-container h2,
 #members-container h2 {
   color: var(--accent);
   margin-bottom: 1.25rem;

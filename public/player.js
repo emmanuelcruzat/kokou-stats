@@ -369,6 +369,14 @@ function fetchShipStatHistory(mode) {
   return shipHistoryPromiseCache[mode];
 }
 
+// short MM.DD label for chart axes, instead of the full locale date string
+function formatChartDate(date) {
+  const d = new Date(date);
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${month}.${day}`;
+}
+
 // creates a line chart the first time, or updates its data on subsequent calls
 function renderLineChart(existingChart, canvas, labels, values, opts) {
   if (existingChart) {
@@ -436,7 +444,7 @@ function renderChartsCard(history) {
   damageCanvas.style.display = "";
   keiCanvas.style.display = "";
 
-  const labels = history.map((h) => new Date(h.recordedAt).toLocaleDateString());
+  const labels = history.map((h) => formatChartDate(h.recordedAt));
 
   winrateHistoryChart = renderLineChart(
     winrateHistoryChart,
@@ -506,7 +514,7 @@ function renderPRChart() {
   document.getElementById("pr-history-placeholder")?.remove();
   canvas.style.display = "";
 
-  const labels = history.map((h) => new Date(h.recordedAt).toLocaleDateString());
+  const labels = history.map((h) => formatChartDate(h.recordedAt));
   const values = history.map((h) => calculatePRFromShipTotals(h.ships, expectedData));
 
   prHistoryChart = renderLineChart(
