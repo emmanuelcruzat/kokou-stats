@@ -1,7 +1,18 @@
 require("dotenv").config();
 const express = require("express");
 const axios = require("axios");
-const { pool, recordWinrate } = require("./db");
+const {
+  pool,
+  recordWinrate,
+  recordStatSnapshot,
+  getStatWindows,
+  getStatHistory,
+  recordShipStatSnapshot,
+  getShipStatWindows,
+  getShipStatHistory,
+  recordCrawlResult,
+  getCrawlStatus,
+} = require("./db");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -256,42 +267,49 @@ app.get("/api/clan/:clanId", async (req, res) => {
   }
 });
 
+// fetches a clan's roster and each member's pvp winrate/battles, recording them into
+// player_winrates (used for the NA Summary page's server-wide sample). Shared by the
+// /members/stats route (triggered by visiting a clan page) and the background clan
+// crawler below (which drives the same thing without a user having to visit anything).
+async function fetchAndRecordClanMemberStats(clanId) {
+  const clanRes = await axios.get(
+    `https://api.worldofwarships.com/wows/clans/info/?application_id=${process.env.WOWS_API_KEY}&clan_id=${clanId}&extra=members`,
+  );
+  const clan = clanRes.data.data[clanId];
+  if (!clan?.members) return { found: false, result: {} };
+
+  const members = Object.values(clan.members);
+  const accountIds = members.map((m) => m.account_id);
+
+  const statsMap = {};
+  for (let i = 0; i < accountIds.length; i += 100) {
+    const chunk = accountIds.slice(i, i + 100).join(",");
+    const accountRes = await axios.get(
+      `https://api.worldofwarships.com/wows/account/info/?application_id=${process.env.WOWS_API_KEY}&account_id=${chunk}&fields=statistics.pvp.battles,statistics.pvp.wins,statistics.pvp.damage_dealt`,
+    );
+    Object.assign(statsMap, accountRes.data.data);
+  }
+
+  const result = {};
+  for (const member of members) {
+    const pvp = statsMap[member.account_id]?.statistics?.pvp;
+    const battles = pvp?.battles ?? 0;
+    const winrate = battles > 0 ? pvp.wins / pvp.battles : null;
+    if (battles > 0) {
+      recordWinrate(member.account_name, winrate, battles).catch((err) =>
+        console.error("Error recording winrate:", err.message),
+      );
+    }
+    result[member.account_id] = { battles, winrate, damage_dealt: pvp?.damage_dealt ?? 0 };
+  }
+
+  return { found: true, memberCount: members.length, result };
+}
+
 // fetches pvp winrate + battles for every clan member and records them in the DB
 app.get("/api/clan/:clanId/members/stats", async (req, res) => {
   try {
-    const clanId = req.params.clanId;
-
-    const clanRes = await axios.get(
-      `https://api.worldofwarships.com/wows/clans/info/?application_id=${process.env.WOWS_API_KEY}&clan_id=${clanId}&extra=members`,
-    );
-    const clan = clanRes.data.data[clanId];
-    if (!clan?.members) return res.json({ data: {} });
-
-    const members = Object.values(clan.members);
-    const accountIds = members.map((m) => m.account_id);
-
-    const statsMap = {};
-    for (let i = 0; i < accountIds.length; i += 100) {
-      const chunk = accountIds.slice(i, i + 100).join(",");
-      const accountRes = await axios.get(
-        `https://api.worldofwarships.com/wows/account/info/?application_id=${process.env.WOWS_API_KEY}&account_id=${chunk}&fields=statistics.pvp.battles,statistics.pvp.wins,statistics.pvp.damage_dealt`,
-      );
-      Object.assign(statsMap, accountRes.data.data);
-    }
-
-    const result = {};
-    for (const member of members) {
-      const pvp = statsMap[member.account_id]?.statistics?.pvp;
-      const battles = pvp?.battles ?? 0;
-      const winrate = battles > 0 ? pvp.wins / pvp.battles : null;
-      if (battles > 0) {
-        recordWinrate(member.account_name, winrate, battles).catch((err) =>
-          console.error("Error recording winrate:", err.message),
-        );
-      }
-      result[member.account_id] = { battles, winrate, damage_dealt: pvp?.damage_dealt ?? 0 };
-    }
-
+    const { result } = await fetchAndRecordClanMemberStats(req.params.clanId);
     res.json({ data: result });
   } catch (err) {
     console.error("Error fetching clan member stats:", err.message);
@@ -366,6 +384,64 @@ app.get("/player/:username/wr", async (req, res) => {
     accountData.data.data[accountId].statistics.pvp.wins /
       accountData.data.data[accountId].statistics.pvp.battles,
   );
+});
+
+// background clan crawler: there's no WG endpoint that lists every clan, so this sweeps
+// clan_id forward starting at 1e9 (real NA clan_ids cluster above that — confirmed by
+// probing; see the clan_crawl_state comment in db.js), recording winrates for whatever
+// roster it finds via fetchAndRecordClanMemberStats. Feeds the NA Summary page's
+// server-wide sample beyond just the clans/players someone happens to browse to. Paced by
+// CRAWL_INTERVAL_MS below to stay well under WG's API rate limit and out of the way of
+// real traffic.
+const CRAWL_INTERVAL_MS = 2500;
+let crawlInFlight = false;
+
+async function crawlNextClan() {
+  if (crawlInFlight) return;
+  crawlInFlight = true;
+  try {
+    const state = await getCrawlStatus();
+    const clanId = state.nextClanId;
+
+    let hit = false;
+    try {
+      const { found, memberCount } = await fetchAndRecordClanMemberStats(clanId);
+      hit = found;
+      if (found) {
+        console.log(`[clan crawl] clan_id ${clanId}: hit (${memberCount} members)`);
+      }
+    } catch (err) {
+      // a 404/"clan not found" from the WG API surfaces as a request error here — treat
+      // it the same as a miss rather than letting it wedge the crawler
+      hit = false;
+    }
+
+    await recordCrawlResult(clanId, hit);
+
+    const updated = await getCrawlStatus();
+    if (updated.totalChecked % 20 === 0) {
+      const pct = updated.hitRate != null ? (updated.hitRate * 100).toFixed(1) : "n/a";
+      console.log(
+        `[clan crawl] ${updated.totalChecked} checked, ${updated.totalHits} hits (${pct}%), next clan_id ${updated.nextClanId}`,
+      );
+    }
+  } catch (err) {
+    console.error("[clan crawl] tick failed:", err.message);
+  } finally {
+    crawlInFlight = false;
+  }
+}
+
+setInterval(crawlNextClan, CRAWL_INTERVAL_MS);
+
+// current progress/hit-rate of the background clan crawler
+app.get("/api/crawl-status", async (req, res) => {
+  try {
+    res.json(await getCrawlStatus());
+  } catch (err) {
+    console.error("Error fetching crawl status:", err.message);
+    res.status(500).json({ error: "Failed to fetch crawl status" });
+  }
 });
 
 app.listen(PORT, () => {
