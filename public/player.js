@@ -2,8 +2,18 @@
 const username = window.location.pathname.split("/")[2];
 console.log(username);
 
-const row = (label, value) =>
-  `<div class="stat-row"><span class="stat-label">${label}</span><span class="stat-value">${value}</span></div>`;
+// shown while the initial player fetch is in flight, since that request is also what
+// checks (and possibly records) a new stats snapshot server-side
+const statsUpdateModal = document.getElementById("stats-update-modal");
+const statsUpdateModalShownAt = Date.now();
+const STATS_UPDATE_MODAL_MIN_MS = 400;
+
+function hideStatsUpdateModal() {
+  const elapsed = Date.now() - statsUpdateModalShownAt;
+  setTimeout(() => {
+    statsUpdateModal.style.display = "none";
+  }, Math.max(0, STATS_UPDATE_MODAL_MIN_MS - elapsed));
+}
 
 let resolvedClanTag = null;
 let resolvedClanId = null;
@@ -27,61 +37,352 @@ let initialPrReady = false;
 let currentMode = "pvp";
 const modeCache = {};
 
-// windowed (last 24h/7d/30d/90d/365d) Random Battles stats, only available for the pvp mode
+// windowed (24h/7d/30d/90d/365d) stats, tracked independently per battle-type mode
 let currentRange = "all";
-let windowsData = null;
-let windowsPromise = null;
+const windowsCache = {};
+const windowsPromiseCache = {};
+const nextSnapshotAtByMode = {};
 
-const rangeLabels = {
-  all: "",
-  "24h": " (Last 24 Hours)",
-  "7d": " (Last 7 Days)",
-  "30d": " (Last 30 Days)",
-  "90d": " (Last 90 Days)",
-  "365d": " (Last 365 Days)",
+const rangeOrder = ["all", "24h", "7d", "30d", "90d", "365d"];
+const rangeTableLabels = {
+  all: "Overall",
+  "24h": "Last 24 Hours",
+  "7d": "Last 7 Days",
+  "30d": "Last 30 Days",
+  "90d": "Last 90 Days",
+  "365d": "Last 365 Days",
 };
 
-function fetchWindows() {
-  if (!windowsPromise) {
-    windowsPromise = fetch(`/api/player/${username}/windows`)
+function fetchWindows(mode) {
+  if (!windowsPromiseCache[mode]) {
+    windowsPromiseCache[mode] = fetch(`/api/player/${username}/windows?mode=${mode}`)
       .then((r) => r.json())
       .then((data) => {
-        windowsData = data;
+        windowsCache[mode] = data;
+        nextSnapshotAtByMode[mode] = data.nextSnapshotAt ?? null;
+        if (currentMode === mode) renderNextUpdateNote();
         return data;
       })
       .catch((err) => {
-        console.error("Error loading time-windowed stats:", err);
-        windowsData = { windows: {} };
-        return windowsData;
+        console.error(`Error loading time-windowed stats for ${mode}:`, err);
+        windowsCache[mode] = { windows: {} };
+        return windowsCache[mode];
       });
   }
-  return windowsPromise;
+  return windowsPromiseCache[mode];
 }
 
-// builds the pvp-like stats object to render for the currently selected mode + range,
-// diffing lifetime totals down to just the selected window when one is active
-function getActiveStatsEntry() {
-  const entry = modeCache[currentMode];
-  if (!entry) return { status: "loading" };
-  if (currentMode !== "pvp" || currentRange === "all") {
-    return { status: "ready", ...entry };
+// resolves the stats to show for one row of the range table, for the current mode
+function rangeRowStats(key) {
+  if (key === "all") {
+    const entry = modeCache[currentMode];
+    if (!entry) return { loading: true };
+    const kei =
+      entry.pvp.battles > 0
+        ? entry.pvp.damage_scouting / entry.pvp.battles / 1000 + entry.winRate
+        : null;
+    return { available: true, pvp: entry.pvp, winRate: entry.winRate, pr: entry.pr, kei };
   }
 
-  const windowEntry = windowsData?.windows?.[currentRange];
-  if (windowEntry === undefined) return { status: "loading" };
-  if (windowEntry === null) return { status: "no-history" };
-  if (windowEntry.battles === 0) return { status: "no-battles" };
+  const w = windowsCache[currentMode]?.windows?.[key];
+  if (!w) return { loading: true };
+  if (!w.available) return { available: false, unlocksAt: w.unlocksAt, reason: w.reason };
 
-  const winRate = (windowEntry.wins / windowEntry.battles) * 100;
-  return {
-    status: "ready",
-    pvp: windowEntry,
-    winRate,
-    currentWrColor: wrColor(winRate),
-    pr: null,
-    windowSince: windowEntry.since,
-  };
+  const winRate = w.battles > 0 ? (w.wins / w.battles) * 100 : 0;
+  // PR needs per-ship expected-value data we don't snapshot, so it's only ever
+  // available for the lifetime "Overall" row, not windowed ranges
+  const kei = w.battles > 0 ? w.damage_scouting / w.battles / 1000 + winRate : null;
+  return { available: true, pvp: w, winRate, pr: null, kei, approximate: w.approximate };
 }
+
+// (re)builds the Range table for the current mode
+function renderRangeTable() {
+  const container = document.getElementById("range-toggle");
+  if (!modeCache[currentMode]) {
+    container.innerHTML = `<div class="loading"><div class="spinner"></div><p>Loading ranges...</p></div>`;
+    return;
+  }
+
+  const rows = rangeOrder
+    .map((key) => ({ key, stats: rangeRowStats(key) }))
+    .map(({ key, stats }) => {
+      const label = rangeTableLabels[key];
+
+      if (stats.loading) {
+        return `<tr class="range-row locked"><td>${label}</td><td class="placeholder">--</td><td class="placeholder">--</td><td class="placeholder">--</td><td class="placeholder">--</td><td class="placeholder">--</td><td>Loading…</td></tr>`;
+      }
+
+      if (!stats.available) {
+        const status = stats.reason
+          ? stats.reason
+          : stats.unlocksAt
+            ? `Unlocks ${new Date(stats.unlocksAt).toLocaleDateString()}`
+            : "Not tracked yet";
+        return `
+          <tr class="range-row locked" data-range="${key}">
+            <td>${label}</td>
+            <td class="placeholder">--</td>
+            <td class="placeholder">--</td>
+            <td class="placeholder">--</td>
+            <td class="placeholder">--</td>
+            <td class="placeholder">--</td>
+            <td>${status}</td>
+          </tr>
+        `;
+      }
+
+      const { pvp, winRate, pr, kei, approximate } = stats;
+      const battles = pvp.battles;
+      const hasBattles = battles > 0;
+      const wr = hasBattles
+        ? `<span style="color:${wrColor(winRate)}">${winRate.toFixed(2)}%</span>`
+        : `<span class="placeholder">--</span>`;
+      const avgDmg = hasBattles
+        ? Math.round(pvp.damage_dealt / battles).toLocaleString()
+        : `<span class="placeholder">--</span>`;
+      const prCell =
+        pr != null
+          ? `<span style="color:${prColor(pr)}">${pr.toLocaleString()}</span>`
+          : `<span class="placeholder">--</span>`;
+      const keiCell =
+        kei != null
+          ? `<span style="color:${keiColor(kei)}">${kei.toFixed(2)}</span>`
+          : `<span class="placeholder">--</span>`;
+      const status = !hasBattles
+        ? "No battles"
+        : approximate
+          ? `Since ${new Date(pvp.since).toLocaleDateString()}`
+          : "";
+      const activeClass = key === currentRange ? " active" : "";
+
+      return `
+        <tr class="range-row${activeClass}" data-range="${key}">
+          <td>${label}</td>
+          <td>${battles.toLocaleString()}</td>
+          <td>${wr}</td>
+          <td>${avgDmg}</td>
+          <td>${prCell}</td>
+          <td>${keiCell}</td>
+          <td>${status}</td>
+        </tr>
+      `;
+    })
+    .join("");
+
+  container.innerHTML = `
+    <div class="table-wrapper">
+      <table>
+        <thead>
+          <tr><th>Range</th><th>Battles</th><th>Win Rate</th><th>Avg. Damage</th><th>PR</th><th>KEI</th><th>Status</th></tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+// Charts card: winrate/avg. damage/KEI-over-time (from recorded snapshots), plus a
+// PR chart that can only ever show a single "today" point — see renderPRChart
+let winrateHistoryChart = null;
+let damageHistoryChart = null;
+let keiHistoryChart = null;
+let prHistoryChart = null;
+const historyCache = {};
+const historyPromiseCache = {};
+
+function fetchStatHistory(mode) {
+  if (!historyPromiseCache[mode]) {
+    historyPromiseCache[mode] = fetch(`/api/player/${username}/stat-history?mode=${mode}`)
+      .then((r) => r.json())
+      .then((data) => {
+        historyCache[mode] = data.history ?? [];
+        return historyCache[mode];
+      })
+      .catch((err) => {
+        console.error(`Error loading stat history for ${mode}:`, err);
+        historyCache[mode] = [];
+        return historyCache[mode];
+      });
+  }
+  return historyPromiseCache[mode];
+}
+
+// creates a line chart the first time, or updates its data on subsequent calls
+function renderLineChart(existingChart, canvas, labels, values, opts) {
+  if (existingChart) {
+    existingChart.data.labels = labels;
+    existingChart.data.datasets[0].data = values;
+    existingChart.update();
+    return existingChart;
+  }
+
+  return new Chart(canvas, {
+    type: "line",
+    data: {
+      labels,
+      datasets: [
+        {
+          label: opts.label,
+          data: values,
+          borderColor: opts.color,
+          backgroundColor: opts.bgColor,
+          fill: true,
+          tension: 0.25,
+          pointRadius: 3,
+        },
+      ],
+    },
+    options: {
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: opts.tooltipLabel } },
+      },
+      scales: {
+        x: { ticks: { color: "#e0e6ed" }, grid: { color: "#1e3448" } },
+        y: {
+          ticks: { color: "#e0e6ed", callback: opts.yTickCallback },
+          grid: { color: "#1e3448" },
+        },
+      },
+    },
+  });
+}
+
+function renderChartsCard(history) {
+  const winrateCanvas = document.getElementById("chart-winrate-history");
+  const damageCanvas = document.getElementById("chart-damage-history");
+  const keiCanvas = document.getElementById("chart-kei-history");
+
+  if (history.length < 1) {
+    winrateCanvas.style.display = "none";
+    damageCanvas.style.display = "none";
+    keiCanvas.style.display = "none";
+    let placeholder = document.getElementById("charts-history-placeholder");
+    if (!placeholder) {
+      placeholder = document.createElement("p");
+      placeholder.id = "charts-history-placeholder";
+      placeholder.className = "range-note";
+      winrateCanvas.closest(".charts-grid").insertAdjacentElement("beforebegin", placeholder);
+    }
+    placeholder.textContent =
+      "Not tracked yet — check back after this player has been looked up.";
+    return;
+  }
+
+  document.getElementById("charts-history-placeholder")?.remove();
+  winrateCanvas.style.display = "";
+  damageCanvas.style.display = "";
+  keiCanvas.style.display = "";
+
+  const labels = history.map((h) => new Date(h.recordedAt).toLocaleDateString());
+
+  winrateHistoryChart = renderLineChart(
+    winrateHistoryChart,
+    winrateCanvas,
+    labels,
+    history.map((h) => (h.winrate * 100).toFixed(2)),
+    {
+      label: "Winrate",
+      color: "#3498db",
+      bgColor: "rgba(52, 152, 219, 0.15)",
+      tooltipLabel: (ctx) => `${ctx.parsed.y}% winrate`,
+      yTickCallback: (v) => `${v}%`,
+    },
+  );
+
+  damageHistoryChart = renderLineChart(
+    damageHistoryChart,
+    damageCanvas,
+    labels,
+    history.map((h) => Math.round(h.avgDamage)),
+    {
+      label: "Avg. Damage",
+      color: "#e67e22",
+      bgColor: "rgba(230, 126, 34, 0.15)",
+      tooltipLabel: (ctx) => `${ctx.parsed.y.toLocaleString()} avg. damage`,
+      yTickCallback: (v) => v.toLocaleString(),
+    },
+  );
+
+  keiHistoryChart = renderLineChart(
+    keiHistoryChart,
+    keiCanvas,
+    labels,
+    history.map((h) => h.kei.toFixed(2)),
+    {
+      label: "KEI",
+      color: "#9b59b6",
+      bgColor: "rgba(155, 89, 182, 0.15)",
+      tooltipLabel: (ctx) => `${ctx.parsed.y} KEI`,
+      yTickCallback: (v) => v,
+    },
+  );
+}
+
+// PR can't be reconstructed historically — it depends on per-ship expected-value
+// comparisons, and player_stat_history only stores whole-account totals, not a
+// per-ship breakdown at each snapshot. So this chart only ever plots today's live
+// PR as a single point; it won't grow richer over time the way the others do unless
+// per-ship history gets tracked too.
+function renderPRChart() {
+  const canvas = document.getElementById("chart-pr-history");
+  const pr = modeCache[currentMode]?.pr;
+
+  if (pr == null) {
+    canvas.style.display = "none";
+    let placeholder = document.getElementById("pr-history-placeholder");
+    if (!placeholder) {
+      placeholder = document.createElement("p");
+      placeholder.id = "pr-history-placeholder";
+      placeholder.className = "range-note";
+      canvas.insertAdjacentElement("afterend", placeholder);
+    }
+    placeholder.textContent = "PR isn't available for this player.";
+    return;
+  }
+
+  document.getElementById("pr-history-placeholder")?.remove();
+  canvas.style.display = "";
+
+  prHistoryChart = renderLineChart(
+    prHistoryChart,
+    canvas,
+    [new Date().toLocaleDateString()],
+    [pr],
+    {
+      label: "PR",
+      color: "#c9a84c",
+      bgColor: "rgba(201, 168, 76, 0.15)",
+      tooltipLabel: (ctx) => `${ctx.parsed.y.toLocaleString()} PR`,
+      yTickCallback: (v) => v.toLocaleString(),
+    },
+  );
+}
+
+// "next update" countdown, based on when the next stat snapshot for this player will be due
+function formatCountdown(target) {
+  const diffMs = new Date(target).getTime() - Date.now();
+  if (diffMs <= 0) {
+    return "The next update is available now — look this player up again to record it.";
+  }
+  const totalMinutes = Math.ceil(diffMs / 60000);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  const parts = [];
+  if (hours > 0) parts.push(`${hours}h`);
+  parts.push(`${minutes}m`);
+  return `Next update available in ${parts.join(" ")}.`;
+}
+
+function renderNextUpdateNote() {
+  const note = document.getElementById("next-update-note");
+  const nextSnapshotAt = nextSnapshotAtByMode[currentMode];
+  note.textContent = nextSnapshotAt
+    ? formatCountdown(nextSnapshotAt)
+    : "This will start tracking the first time this player is looked up.";
+}
+
+setInterval(renderNextUpdateNote, 30000);
 
 // shared state for the ships table + charts so they can be re-rendered per battle-type mode
 let sortCol = "battles";
@@ -103,15 +404,6 @@ const battleModeConfig = {
   coop: { statsField: "pve", endpoint: "coop", shipsExtra: "pve" },
 };
 
-const battleModeLabels = {
-  pvp: "Random Battles",
-  solo: "Solo",
-  div2: "Double Division",
-  div3: "Triple Division",
-  rank: "Ranked Battles",
-  coop: "Co-Op Battles",
-};
-
 function tryRenderPlayerDetails() {
   if (!accountData || captainTitle === null || !initialPrReady) return;
 
@@ -127,7 +419,6 @@ function tryRenderPlayerDetails() {
     </div>
   `;
 
-  renderStatGrid();
 }
 
 // fetches and caches the account + ship stats needed to display a given battle type
@@ -151,130 +442,6 @@ async function loadMode(mode) {
   return entry;
 }
 
-function renderStatGrid() {
-  const container = document.getElementById("stat-grid-container");
-  const active = getActiveStatsEntry();
-
-  if (active.status === "loading") {
-    container.innerHTML = `<div class="loading"><div class="spinner"></div><p>Loading stats...</p></div>`;
-    return;
-  }
-  if (active.status === "no-history") {
-    container.innerHTML = `<p class="range-note">Not enough tracked history for this range yet — KokouStats only starts counting from the first time a player is looked up, so check back later.</p>`;
-    return;
-  }
-  if (active.status === "no-battles") {
-    container.innerHTML = `<p class="range-note">This player hasn't played any Random Battles in this range.</p>`;
-    return;
-  }
-
-  const { pvp, winRate, currentWrColor, pr, windowSince } = active;
-  const rangeSuffix = rangeLabels[currentRange] ?? "";
-  const sinceNote = windowSince
-    ? `<p class="range-note">Based on battles played since ${new Date(windowSince).toLocaleString()}</p>`
-    : "";
-
-  container.innerHTML = `
-    ${sinceNote}
-    <div class="stat-grid">
-      <div class="stat-card stat-card-battle">
-        <h3>Battle Record</h3>
-        ${(() => {
-          const next = wrNextTier(winRate);
-          const nextText = next
-            ? `<div class="winrate-next" style="color:${wrColor(parseFloat(winRate) + parseFloat(next.needed))}">+${next.needed}% to ${next.label}</div>`
-            : "";
-          return `
-            <div class="winrate-display" style="color:${currentWrColor}">
-              <div class="metric-label">${battleModeLabels[currentMode]} Winrate${rangeSuffix}</div>
-              <div class="winrate-top">
-                <div class="winrate-pct">${winRate.toFixed(2)}%</div>
-                <div class="winrate-label">${wrLabel(winRate)}</div>
-              </div>
-              ${nextText}
-            </div>
-          `;
-        })()}
-        ${(() => {
-          if (pr === null) {
-            const label =
-              windowSince != null
-                ? "not available for time-windowed views"
-                : "";
-            return `
-              <div class="winrate-display" style="color:#546e7a">
-                <div class="metric-label">WoWS Numbers Personal Rating (PR) <a href="https://na.wows-numbers.com/personal/rating" target="_blank" class="info-link">?</a></div>
-                <div class="winrate-top">
-                  <div class="metric-pct">—</div>
-                  <div class="winrate-label">${label}</div>
-                </div>
-              </div>
-            `;
-          }
-          const nextPR = prNextTier(pr);
-          const nextText = nextPR
-            ? `<div class="winrate-next" style="color:${prColor(pr + nextPR.needed)}">+${nextPR.needed} to ${nextPR.label}</div>`
-            : "";
-          return `
-            <div class="winrate-display" style="color:${prColor(pr)}">
-              <div class="metric-label">WoWS Numbers Personal Rating (PR) <a href="https://na.wows-numbers.com/personal/rating" target="_blank" class="info-link">?</a></div>
-              <div class="winrate-top">
-                <div class="metric-pct">${pr.toLocaleString()}</div>
-                <div class="winrate-label">${prLabel(pr)}</div>
-              </div>
-              ${nextText}
-            </div>
-          `;
-        })()}
-        ${(() => {
-          const kei = pvp.damage_scouting / pvp.battles / 1000 + winRate;
-          const nextKEI = keiNextTier(kei);
-          const nextKEIText = nextKEI
-            ? `<div class="winrate-next" style="color:${keiColor(kei + parseFloat(nextKEI.needed))}">+${nextKEI.needed} to ${nextKEI.label}</div>`
-            : "";
-          return `
-            <div class="winrate-display" style="color:${keiColor(kei)}">
-              <div class="metric-label">Kokou's Effectiveness Index (KEI) <a href="/kei" target="_blank" class="info-link">?</a></div>
-              <div class="winrate-top">
-                <div class="metric-pct">${kei.toFixed(2)}</div>
-                <div class="winrate-label">${keiLabel(kei)}</div>
-              </div>
-              ${nextKEIText}
-            </div>
-          `;
-        })()}
-        ${row("Battles", pvp.battles.toLocaleString())}
-        ${row("Wins", pvp.wins.toLocaleString())}
-        ${row("Losses", pvp.losses.toLocaleString())}
-        ${row("Draws", pvp.draws.toLocaleString())}
-        ${row("Survival Rate", `${((pvp.survived_battles / pvp.battles) * 100).toFixed(2)}%`)}
-      </div>
-      <div class="stat-card stat-card-medals">
-        <h3>Medals</h3>
-        <p class="wip-label">WORK IN PROGRESS</p>
-      </div>
-      <div class="stat-card">
-        <h3>Damage</h3>
-        ${row("Damage Dealt", pvp.damage_dealt.toLocaleString())}
-        ${row("Avg. Damage / Battle", (pvp.damage_dealt / pvp.battles).toLocaleString(undefined, { maximumFractionDigits: 0 }))}
-        ${row("Spotting Damage", pvp.damage_scouting.toLocaleString())}
-        ${row("Avg. Spotting / Battle", (pvp.damage_scouting / pvp.battles).toLocaleString(undefined, { maximumFractionDigits: 0 }))}
-      </div>
-      <div class="stat-card">
-        <h3>Sinks</h3>
-        ${row("Warships Sunk", pvp.frags.toLocaleString())}
-        ${row("Avg. Sunk / Battle", (pvp.frags / pvp.battles).toFixed(2))}
-        ${row("Destruction Ratio", pvp.battles === pvp.survived_battles ? "—" : (pvp.frags / (pvp.battles - pvp.survived_battles)).toFixed(2))}
-      </div>
-      <div class="stat-card">
-        <h3>Experience</h3>
-        ${row("Total XP", pvp.xp.toLocaleString())}
-        ${row("Avg. XP / Battle", (pvp.xp / pvp.battles).toLocaleString(undefined, { maximumFractionDigits: 0 }))}
-      </div>
-    </div>
-  `;
-}
-
 function tryClanRender() {
   const clanCard = document.getElementById("clan-card");
   if (!clanCard || !clanPayload) return;
@@ -293,45 +460,39 @@ function tryClanRender() {
   `;
 }
 
-// range toggle: only meaningful for the pvp mode, since that's the only mode we
-// keep a history of snapshots for; hidden and reset whenever another mode is active
+// range table + Charts card: shown for every battle-type mode, each tracked
+// independently via the per-mode caches above
 const rangeToggle = document.getElementById("range-toggle");
-const rangeButtons = rangeToggle.querySelectorAll(".battle-type-btn");
 
-function setRangeToggleVisible(visible) {
-  rangeToggle.style.display = visible ? "" : "none";
-}
+// (re)loads the range table + Charts card for whichever mode is passed in, using
+// cached data where available and fetching (once, cached) otherwise
+function loadRangeAndCharts(mode) {
+  renderRangeTable();
+  renderNextUpdateNote();
+  renderPRChart();
 
-function resetRangeToggle() {
-  currentRange = "all";
-  rangeButtons.forEach((b) => b.classList.toggle("active", b.dataset.range === "all"));
-}
-
-rangeButtons.forEach((btn) => {
-  btn.addEventListener("click", () => {
-    const range = btn.dataset.range;
-    if (range === currentRange) return;
-
-    rangeButtons.forEach((b) => b.classList.remove("active"));
-    btn.classList.add("active");
-    currentRange = range;
-
-    if (range === "all" || windowsData) {
-      renderStatGrid();
-      return;
-    }
-
-    renderStatGrid();
-    fetchWindows().then(() => {
-      if (currentMode === "pvp") renderStatGrid();
-    });
+  fetchWindows(mode).then(() => {
+    if (currentMode === mode) renderRangeTable();
   });
+  fetchStatHistory(mode).then((history) => {
+    if (currentMode === mode) renderChartsCard(history);
+  });
+}
+
+// event delegation: the range table is fully rebuilt on every render, so the
+// listener is attached once on the (stable) container
+rangeToggle.addEventListener("click", (e) => {
+  const row = e.target.closest("tr.range-row:not(.locked)");
+  if (!row) return;
+  const range = row.dataset.range;
+  if (range === currentRange) return;
+
+  currentRange = range;
+  renderRangeTable();
 });
 
-setRangeToggleVisible(currentMode === "pvp");
-
-// battle type rack: switches the Battle Record stats (and PR) between
-// Random Battles, Solo, Duo Division, and Trio Division
+// battle type rack: switches the Range table, Charts card, and ships data between
+// Random Battles, Solo, Duo Division, Trio Division, Ranked, and Co-Op
 const battleTypeButtons = document.querySelectorAll("#mode-toggle .battle-type-btn");
 battleTypeButtons.forEach((btn) => {
   btn.addEventListener("click", async () => {
@@ -341,23 +502,27 @@ battleTypeButtons.forEach((btn) => {
     battleTypeButtons.forEach((b) => b.classList.remove("active"));
     btn.classList.add("active");
     currentMode = mode;
-    resetRangeToggle();
-    setRangeToggleVisible(mode === "pvp");
-    renderStatGrid();
+    currentRange = "all";
+    loadRangeAndCharts(mode);
     renderShipsForMode(mode);
 
-    if (modeCache[mode]) return;
+    if (modeCache[mode]) {
+      renderRangeTable();
+      renderPRChart();
+      return;
+    }
 
     try {
       await loadMode(mode);
       if (currentMode === mode) {
-        renderStatGrid();
+        renderRangeTable();
+        renderPRChart();
         renderShipsForMode(mode);
       }
     } catch (err) {
       console.error("Error loading battle type stats:", err);
       if (currentMode === mode) {
-        document.getElementById("stat-grid-container").innerHTML =
+        document.getElementById("range-toggle").innerHTML =
           `<p>Error loading stats. Please try again later.</p>`;
         document.getElementById("ships-container").innerHTML =
           `<p>Error loading ship stats. Please try again later.</p>`;
@@ -383,11 +548,16 @@ fetch(`/api/player/${username}`)
     modeCache.pvp = { pvp, winRate, currentWrColor, pr: null };
     tryRenderPlayerDetails();
     tryClanRender();
+    hideStatsUpdateModal();
+
+    // eagerly load the range table + Charts card since pvp is the default mode
+    loadRangeAndCharts("pvp");
   })
   .catch((error) => {
     console.error("Error fetching player stats:", error);
     const statsContainer = document.getElementById("stats-container");
     statsContainer.innerHTML = `<p>Error fetching player stats. Please try again later.</p>`;
+    hideStatsUpdateModal();
   });
 
 // column names and labels for the ships table, along with a function to get the value to sort by for each column
@@ -499,40 +669,6 @@ const romanNumerals = [
   "XI",
 ];
 
-const wrTiers = [
-  { threshold: 47, label: "Below Average" },
-  { threshold: 49, label: "Average" },
-  { threshold: 52, label: "Good" },
-  { threshold: 54, label: "Very Good" },
-  { threshold: 56, label: "Great" },
-  { threshold: 60, label: "Unicum" },
-  { threshold: 65, label: "Super Unicum" },
-];
-
-function wrNextTier(rate) {
-  const next = wrTiers.find((t) => rate < t.threshold);
-  if (!next) return null;
-  return { label: next.label, needed: (next.threshold - rate).toFixed(2) };
-}
-
-function wrLabel(rate) {
-  return rate >= 65
-    ? "Super Unicum"
-    : rate >= 60
-      ? "Unicum"
-      : rate >= 56
-        ? "Great"
-        : rate >= 54
-          ? "Very Good"
-          : rate >= 52
-            ? "Good"
-            : rate >= 49
-              ? "Average"
-              : rate >= 47
-                ? "Below Average"
-                : "Bad";
-}
-
 function wrColor(rate) {
   return rate >= 65
     ? "#a855f7"
@@ -551,38 +687,6 @@ function wrColor(rate) {
                 : "#e74c3c";
 }
 
-const prTiers = [
-  { threshold: 750, label: "Below Average" },
-  { threshold: 1100, label: "Average" },
-  { threshold: 1350, label: "Good" },
-  { threshold: 1550, label: "Very Good" },
-  { threshold: 1750, label: "Great" },
-  { threshold: 2100, label: "Unicum" },
-  { threshold: 2450, label: "Super Unicum" },
-];
-
-function prNextTier(pr) {
-  const next = prTiers.find((t) => pr < t.threshold);
-  if (!next) return null;
-  return { label: next.label, needed: next.threshold - pr };
-}
-
-const keiTiers = [
-  { threshold: 50, label: "Below Average" },
-  { threshold: 58, label: "Average" },
-  { threshold: 63, label: "Good" },
-  { threshold: 68, label: "Very Good" },
-  { threshold: 73, label: "Great" },
-  { threshold: 80, label: "Unicum" },
-  { threshold: 90, label: "Super Unicum" },
-];
-
-function keiNextTier(kei) {
-  const next = keiTiers.find((t) => kei < t.threshold);
-  if (!next) return null;
-  return { label: next.label, needed: (next.threshold - kei).toFixed(2) };
-}
-
 function keiColor(kei) {
   return kei >= 90
     ? "#a855f7"
@@ -599,42 +703,6 @@ function keiColor(kei) {
               : kei >= 50
                 ? "#e67e22"
                 : "#e74c3c";
-}
-
-function keiLabel(kei) {
-  return kei >= 90
-    ? "Super Unicum"
-    : kei >= 80
-      ? "Unicum"
-      : kei >= 73
-        ? "Great"
-        : kei >= 68
-          ? "Very Good"
-          : kei >= 63
-            ? "Good"
-            : kei >= 58
-              ? "Average"
-              : kei >= 50
-                ? "Below Average"
-                : "Bad";
-}
-
-function prLabel(pr) {
-  return pr >= 2450
-    ? "Super Unicum"
-    : pr >= 2100
-      ? "Unicum"
-      : pr >= 1750
-        ? "Great"
-        : pr >= 1550
-          ? "Very Good"
-          : pr >= 1350
-            ? "Good"
-            : pr >= 1100
-              ? "Average"
-              : pr >= 750
-                ? "Below Average"
-                : "Bad";
 }
 
 function prColor(pr) {
@@ -1045,6 +1113,10 @@ fetch(`/api/player/${username}/ships`)
         }
         initialPrReady = true;
         tryRenderPlayerDetails();
+        if (currentMode === "pvp") {
+          renderPRChart();
+          renderRangeTable();
+        }
       });
   })
   .catch((error) => {
