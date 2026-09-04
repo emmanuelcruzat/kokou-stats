@@ -39,85 +39,92 @@
         <ul>
           <li><a href="/">Home</a></li>
           <li><a href="/na-server">NA Summary</a></li>
-          <li><a href="/about">About</a></li>        </ul>
+          <li><a href="/about">About</a></li>
+        </ul>
         <button id="theme-toggle" class="theme-toggle" type="button"></button>
       </nav>
     </header>
 
-    <main>
-      <section class="about">
-        <h2>NA Server Winrate Distribution</h2>
-        <p>
-          Every time someone looks up a player on KokouStats, that player's
-          overall winrate and battle count gets recorded. A background crawler
-          also sweeps clan rosters in the background to keep growing this
-          sample on its own. The numbers below are built from that growing
-          sample of <strong>players seen</strong> on our website.
-        </p>
-        <p>
-          These numbers are <strong>not</strong> a true random sample of the
-          entire NA server population, and are probably skewed toward more
-          active clans and more frequently searched players.
-        </p>
-      </section>
-      <div class="battle-type-rack" id="range-toggle" role="group" aria-label="Time range">
-        <button class="battle-type-btn" data-range="24h">Last 24 Hours</button>
-        <button class="battle-type-btn" data-range="7d">Last 7 Days</button>
-        <button class="battle-type-btn" data-range="30d">Last 30 Days</button>
-        <button class="battle-type-btn" data-range="90d">Last 90 Days</button>
-        <button class="battle-type-btn" data-range="365d">Last 365 Days</button>
-        <button class="battle-type-btn active" data-range="all">All Time</button>
-      </div>
-      <p class="dash-summary">
-        The average NA World of Warships player is
-        <strong id="dash-summary-tier"></strong> with a winrate of
-        <strong id="dash-summary-winrate"></strong> over
-        <span id="dash-summary-battles"></span> battles.
-      </p>
-      <div class="charts-grid">
-        <div class="stat-card">
-          <div class="winrate-display" style="color: #c9a84c">
-            <div class="metric-label">
-              Total Players in the KokouStats Database
+    <main id="na-main">
+      <div class="sections-stack">
+        <section id="na-header" class="header-row page-section">
+          <div class="player-header">
+            <h2>NA Server Winrate Distribution</h2>
+            <p>
+              Every time someone looks up a player on KokouStats, that player's
+              overall winrate and battle count gets recorded. A background
+              crawler also sweeps clan rosters in the background to keep growing
+              this sample on its own. The numbers below are built from that
+              growing sample of <strong>players seen</strong> on our website.
+            </p>
+            <p>
+              These numbers are <strong>not</strong> a true random sample of the
+              entire NA server population, and are probably skewed toward more
+              active clans and more frequently searched players.
+            </p>
+            <p>
+              The average winrate and derived values below are
+              <strong>unweighted</strong>.
+            </p>
+          </div>
+        </section>
+
+        <section id="na-stats" class="page-section">
+          <h2 class="section-title">Summary</h2>
+          <p class="dash-summary">
+            The average NA World of Warships player is
+            <strong id="dash-summary-tier"></strong> with a winrate of
+            <strong id="dash-summary-winrate"></strong> over
+            <span id="dash-summary-battles"></span> battles.
+          </p>
+          <div class="clan-row overall-hero-row">
+            <div class="clan-item">
+              <div class="clan-item-label">
+                Total Players in the KokouStats Database
+              </div>
+              <div class="clan-item-value" id="dash-total-players">--</div>
             </div>
-            <div class="winrate-top">
-              <div class="winrate-pct" id="dash-total-players">--</div>
+            <div class="clan-item">
+              <div class="clan-item-label">NA Average Winrate (Unweighted)</div>
+              <div class="clan-item-value" id="dash-average-winrate">--</div>
+            </div>
+            <div class="clan-item">
+              <div class="clan-item-label">NA Average Battles Played</div>
+              <div class="clan-item-value" id="dash-average-battles">--</div>
             </div>
           </div>
-        </div>
-        <div class="stat-card">
-          <div class="winrate-display" style="color: #c9a84c">
-            <div class="metric-label">NA Average Winrate</div>
-            <div class="winrate-top">
-              <div class="winrate-pct" id="dash-average-winrate">--</div>
+          <div class="clan-row secondary-stats-row">
+            <div class="clan-item">
+              <div class="clan-item-label">Std. Deviation</div>
+              <div class="clan-item-value" id="dash-stddev">--</div>
+            </div>
+            <div class="clan-item">
+              <div class="clan-item-label">1st Quartile (Q1)</div>
+              <div class="clan-item-value" id="dash-q1">--</div>
+            </div>
+            <div class="clan-item">
+              <div class="clan-item-label">3rd Quartile (Q3)</div>
+              <div class="clan-item-value" id="dash-q3">--</div>
             </div>
           </div>
-        </div>
-        <div class="stat-card">
-          <div class="winrate-display" style="color: #c9a84c">
-            <div class="metric-label">NA Average Battles Played</div>
-            <div class="winrate-top">
-              <div class="winrate-pct" id="dash-average-battles">--</div>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div class="charts-grid">
-        <div class="chart-card">
-          <h3>NA Server Winrate Distribution</h3>
+        </section>
+
+        <section class="page-section section-charts">
+          <h2 class="section-title">NA Server Winrate Distribution</h2>
           <canvas id="chart-winrate-distribution"></canvas>
-        </div>
+        </section>
+
+        <section id="na-why" class="page-section">
+          <h2 class="section-title">Why This Matters</h2>
+          <p>
+            There are a lot of long-standing theories and debates in the World
+            of Warships community about winrates and player skill distribution.
+            By collecting and sharing this data, we hope to provide some insight
+            into these questions and foster more informed discussions. Plus,
+            it's just interesting to see all the data mapped out in one place!
+          </p>
+        </section>
       </div>
-      <section>
-        <h2>Why This Matters</h2>
-        <p>
-          There are a lot of long-standing theories and debates in the World of
-          Warships community about winrates and player skill distribution. By
-          collecting and sharing this data, we hope to provide some insight into
-          these questions and foster more informed discussions. Plus, it's just
-          interesting to see all the data mapped out in one place!
-        </p>
-      </section>
     </main>
 
     <footer>

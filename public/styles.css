@@ -283,7 +283,8 @@ main {
 /* main's top/bottom padding is shared site-wide, so it's overridden here rather than in
    main itself — the full-bleed sections butt right up against the header and footer */
 #player-main,
-#clan-main {
+#clan-main,
+#na-main {
   padding-top: 0;
   padding-bottom: 0;
 }
@@ -310,7 +311,9 @@ main {
 
 #stats-container.page-section,
 #ships-container.page-section,
-#clan-stats.page-section {
+#clan-stats.page-section,
+#na-stats.page-section,
+#na-why.page-section {
   background-color: var(--bg-surface);
 }
 
@@ -844,6 +847,17 @@ tr.range-row.locked td {
   margin: 1.5rem 0;
 }
 
+.secondary-stats-row {
+  margin-top: 1.5rem;
+  flex-wrap: wrap;
+  row-gap: 1rem;
+}
+
+.secondary-stats-row .clan-item-value {
+  font-size: 1.4rem;
+  font-weight: 700;
+}
+
 .charts-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -914,7 +928,8 @@ tr.range-row.locked td {
   font-weight: 600;
 }
 
-.chart-card canvas {
+.chart-card canvas,
+#chart-winrate-distribution {
   max-height: 340px;
 }
 

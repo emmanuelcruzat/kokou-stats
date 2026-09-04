@@ -498,7 +498,13 @@ app.get("/api/na-server/summary", async (req, res) => {
     const result = await pool.query(
       `SELECT count(*) AS total_players,
               coalesce(avg(winrate), 0) AS average_winrate,
-              coalesce(avg(battles), 0) AS average_battles
+              coalesce(avg(battles), 0) AS average_battles,
+              coalesce(stddev_pop(winrate), 0) AS stddev_winrate,
+              coalesce(min(winrate), 0) AS min_winrate,
+              coalesce(max(winrate), 0) AS max_winrate,
+              coalesce(percentile_cont(0.25) within group (order by winrate), 0) AS q1_winrate,
+              coalesce(percentile_cont(0.5) within group (order by winrate), 0) AS median_winrate,
+              coalesce(percentile_cont(0.75) within group (order by winrate), 0) AS q3_winrate
        FROM player_winrates
        ${where}`,
     );
@@ -507,6 +513,12 @@ app.get("/api/na-server/summary", async (req, res) => {
       totalPlayers: parseInt(row.total_players, 10),
       averageWinrate: parseFloat(row.average_winrate),
       averageBattles: parseFloat(row.average_battles),
+      stdDevWinrate: parseFloat(row.stddev_winrate),
+      minWinrate: parseFloat(row.min_winrate),
+      maxWinrate: parseFloat(row.max_winrate),
+      q1Winrate: parseFloat(row.q1_winrate),
+      medianWinrate: parseFloat(row.median_winrate),
+      q3Winrate: parseFloat(row.q3_winrate),
     });
   } catch (err) {
     console.error("Error fetching NA server summary:", err.message);
@@ -514,22 +526,23 @@ app.get("/api/na-server/summary", async (req, res) => {
   }
 });
 
-// returns a 100-bucket histogram (1% wide buckets) of recorded player winrates
+// returns a 101-bucket histogram (1% wide buckets, 0%-100% inclusive) of recorded player
+// winrates — 100% gets its own bucket rather than being folded into the 99% one
 app.get("/api/na-server/winrate-distribution", async (req, res) => {
   try {
     const where = rangeClause(req.query.range);
     const result = await pool.query(
-      `SELECT LEAST(floor(winrate * 100)::int, 99) AS bucket, count(*) AS count
+      `SELECT LEAST(floor(winrate * 100)::int, 100) AS bucket, count(*) AS count
        FROM player_winrates
        ${where}
        GROUP BY bucket`,
     );
 
-    const counts = new Array(100).fill(0);
+    const counts = new Array(101).fill(0);
     for (const row of result.rows) {
       counts[row.bucket] = parseInt(row.count, 10);
     }
-    const labels = Array.from({ length: 100 }, (_, i) => `${i}%`);
+    const labels = Array.from({ length: 101 }, (_, i) => `${i}%`);
 
     res.json({ labels, counts });
   } catch (err) {
