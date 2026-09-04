@@ -38,32 +38,29 @@
         </form>
         <ul>
           <li><a href="/">Home</a></li>
-          <li><a href="/na-server">NA Server Stats</a></li>
-          <li><a href="/about">About</a></li>
-          <li>
-            <a
-              href="https://emmanuelcruzat.github.io/portfolio-dva/"
-              target="_blank"
-              >Contact</a
-            >
-          </li>
-        </ul>
+          <li><a href="/na-server">NA Summary</a></li>
+          <li><a href="/about">About</a></li>        </ul>
         <button id="theme-toggle" class="theme-toggle" type="button"></button>
       </nav>
     </header>
 
-    <main>
-      <section id="stats-container">
-        <div class="header-row">
-          <div id="player-header-container">
-            <div class="loading">
-              <div class="spinner"></div>
-              <p>Loading player...</p>
-            </div>
+    <main id="player-main">
+      <div class="sections-stack">
+      <section class="header-row page-section">
+        <div id="player-header-container">
+          <div class="loading">
+            <div class="spinner"></div>
+            <p>Loading player...</p>
           </div>
-          <div id="clan-card" class="stat-card" style="display: none"></div>
         </div>
-        <div class="battle-type-rack">
+      </section>
+
+      <section id="stats-container" class="page-section">
+        <div class="section-header-row">
+          <h3 class="section-subtitle">Service Record</h3>
+          <p class="range-note" id="next-update-note"></p>
+        </div>
+        <div class="battle-type-rack" id="mode-toggle">
           <button class="battle-type-btn active" data-mode="pvp">
             Random Battles
           </button>
@@ -81,49 +78,81 @@
             Co-Op Battles
           </button>
         </div>
-        <div id="stat-grid-container">
-          <div class="loading">
-            <div class="spinner"></div>
-            <p>Loading stats...</p>
-          </div>
+        <div id="service-record-card">
+          <div class="overall-hero" id="overall-hero"></div>
+          <div class="range-panel" id="range-toggle"></div>
         </div>
       </section>
+
       <section class="error-message" style="display: none">
         <h2>Error</h2>
         <p>Unable to load player statistics. Please try again later.</p>
       </section>
-      <div class="charts-grid">
-        <div class="chart-card">
-          <h3>Battles by Ship Class</h3>
-          <canvas id="chart-class"></canvas>
-        </div>
-        <div class="chart-card">
-          <div class="chart-card-header">
-            <h3>Battles by Nation</h3>
-            <div class="chart-toggle">
-              <button class="toggle-btn active" id="toggle-nation">
-                Nation
-              </button>
-              <button class="toggle-btn" id="toggle-coalition">
-                Coalition
-              </button>
+
+      <section class="page-section section-charts">
+        <h2 class="section-title">Charts &amp; Graphs</h2>
+        <div id="charts-card">
+          <div class="charts-grid">
+            <div class="chart-sub">
+              <h4>WR</h4>
+              <canvas id="chart-winrate-history"></canvas>
+            </div>
+            <div class="chart-sub">
+              <h4>Average Damage</h4>
+              <canvas id="chart-damage-history"></canvas>
+            </div>
+            <div class="chart-sub">
+              <h4>PR</h4>
+              <canvas id="chart-pr-history"></canvas>
+            </div>
+            <div class="chart-sub">
+              <h4>KEI</h4>
+              <canvas id="chart-kei-history"></canvas>
             </div>
           </div>
-          <canvas id="chart-nation"></canvas>
         </div>
-        <div class="chart-card">
-          <h3>Battles by Tier</h3>
-          <canvas id="chart-tier"></canvas>
+        <div class="charts-grid">
+          <div class="chart-sub">
+            <h4>Battles by Ship Class</h4>
+            <canvas id="chart-class"></canvas>
+          </div>
+          <div class="chart-sub">
+            <div class="chart-sub-header">
+              <h4>Battles by Nation</h4>
+              <div class="chart-toggle">
+                <button class="toggle-btn active" id="toggle-nation">
+                  Nation
+                </button>
+                <button class="toggle-btn" id="toggle-coalition">
+                  Coalition
+                </button>
+              </div>
+            </div>
+            <canvas id="chart-nation"></canvas>
+          </div>
+          <div class="chart-sub">
+            <h4>Battles by Tier</h4>
+            <canvas id="chart-tier"></canvas>
+          </div>
         </div>
-      </div>
-      <section id="ships-container">
-        <h2>Ships</h2>
+      </section>
+
+      <section id="ships-container" class="page-section">
+        <h2 class="section-title">Ships</h2>
         <div class="loading">
           <div class="spinner"></div>
           <p>Loading ship statistics...</p>
         </div>
       </section>
+      </div>
     </main>
+
+    <div id="stats-update-modal" class="modal-overlay">
+      <div class="modal-box">
+        <div class="spinner"></div>
+        <p>Updating stats...</p>
+      </div>
+    </div>
 
     <footer>
       <p>

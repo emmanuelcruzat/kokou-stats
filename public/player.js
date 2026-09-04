@@ -2,12 +2,21 @@
 const username = window.location.pathname.split("/")[2];
 console.log(username);
 
-const row = (label, value) =>
-  `<div class="stat-row"><span class="stat-label">${label}</span><span class="stat-value">${value}</span></div>`;
+// shown while the initial player fetch is in flight, since that request is also what
+// checks (and possibly records) a new stats snapshot server-side
+const statsUpdateModal = document.getElementById("stats-update-modal");
+const statsUpdateModalShownAt = Date.now();
+const STATS_UPDATE_MODAL_MIN_MS = 400;
+
+function hideStatsUpdateModal() {
+  const elapsed = Date.now() - statsUpdateModalShownAt;
+  setTimeout(() => {
+    statsUpdateModal.style.display = "none";
+  }, Math.max(0, STATS_UPDATE_MODAL_MIN_MS - elapsed));
+}
 
 let resolvedClanTag = null;
 let resolvedClanId = null;
-let clanPayload = null;
 
 function applyClanTag(tag, id) {
   resolvedClanTag = tag;
@@ -19,6 +28,14 @@ function applyClanTag(tag, id) {
 const clanItem = (label, value) =>
   `<div class="clan-item"><div class="clan-item-label">${label}</div><div class="clan-item-value">${value}</div></div>`;
 
+// account_id(s) belonging to KokouStats' own developer(s), shown with a Developer tag on
+// their player page
+const DEVELOPER_ACCOUNT_IDS = new Set(["1055557648"]);
+
+// account_id(s) that get a fixed personal badge on their player page, regardless of their
+// actual Admiral Hipper stats
+const HIPPER_ENTHUSIAST_ACCOUNT_IDS = new Set(["1055557648"]);
+
 let accountData = null;
 let accountId = null;
 let captainTitle = null;
@@ -26,6 +43,526 @@ let expectedData = null;
 let initialPrReady = false;
 let currentMode = "pvp";
 const modeCache = {};
+
+// windowed (24h/7d/30d/90d/365d) stats, tracked independently per battle-type mode
+let currentRange = "all";
+const windowsCache = {};
+const windowsPromiseCache = {};
+const nextSnapshotAtByMode = {};
+
+// per-ship baseline totals for each window, used to compute exact windowed PR (see
+// rangeRowStats) — tracked the same way as windowsCache above
+const shipWindowsCache = {};
+const shipWindowsPromiseCache = {};
+
+const rangeOrder = ["all", "24h", "7d", "30d", "90d", "365d"];
+const rangeTableLabels = {
+  all: "Overall",
+  "24h": "Last 24 Hours",
+  "7d": "Last 7 Days",
+  "30d": "Last 30 Days",
+  "90d": "Last 90 Days",
+  "365d": "Last 365 Days",
+};
+
+function fetchWindows(mode) {
+  if (!windowsPromiseCache[mode]) {
+    windowsPromiseCache[mode] = fetch(`/api/player/${username}/windows?mode=${mode}`)
+      .then((r) => r.json())
+      .then((data) => {
+        windowsCache[mode] = data;
+        nextSnapshotAtByMode[mode] = data.nextSnapshotAt ?? null;
+        if (currentMode === mode) renderNextUpdateNote();
+        return data;
+      })
+      .catch((err) => {
+        console.error(`Error loading time-windowed stats for ${mode}:`, err);
+        windowsCache[mode] = { windows: {} };
+        return windowsCache[mode];
+      });
+  }
+  return windowsPromiseCache[mode];
+}
+
+function fetchShipWindows(mode) {
+  if (!shipWindowsPromiseCache[mode]) {
+    shipWindowsPromiseCache[mode] = fetch(`/api/player/${username}/ship-windows?mode=${mode}`)
+      .then((r) => r.json())
+      .then((data) => {
+        shipWindowsCache[mode] = data;
+        return data;
+      })
+      .catch((err) => {
+        console.error(`Error loading windowed ship stats for ${mode}:`, err);
+        shipWindowsCache[mode] = { windows: {} };
+        return shipWindowsCache[mode];
+      });
+  }
+  return shipWindowsPromiseCache[mode];
+}
+
+// standard normal CDF (Abramowitz & Stegun 7.1.26 approximation, ~7 decimal places accurate)
+function normalCdf(x) {
+  const t = 1 / (1 + 0.2316419 * Math.abs(x));
+  const d = 0.3989423 * Math.exp((-x * x) / 2);
+  let prob = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274))));
+  if (x > 0) prob = 1 - prob;
+  return prob;
+}
+
+// two-tailed p-value for a z statistic
+function twoTailedPValue(z) {
+  return 2 * (1 - normalCdf(Math.abs(z)));
+}
+
+// two-proportion z-test comparing a window's win rate against the player's win rate in
+// everything OUTSIDE that window (not the raw lifetime rate, which would double-count the
+// window itself). Tells apart a real shift in skill from ordinary streak variance — small
+// samples naturally need a much bigger gap to clear the bar, since the standard error grows
+// as either sample shrinks. Standard p < 0.05 (two-tailed) is the bar for "significant";
+// p < 0.01 for "strong".
+function winrateSignificance(windowBattles, windowWins, overallBattles, overallWins) {
+  const priorBattles = overallBattles - windowBattles;
+  const priorWins = overallWins - windowWins;
+  if (priorBattles <= 0 || windowBattles <= 0) return null;
+
+  const p1 = priorWins / priorBattles;
+  const p2 = windowWins / windowBattles;
+  const pooled = (priorWins + windowWins) / (priorBattles + windowBattles);
+  const se = Math.sqrt(pooled * (1 - pooled) * (1 / priorBattles + 1 / windowBattles));
+  if (!se) return null;
+
+  const z = (p2 - p1) / se;
+  const pValue = twoTailedPValue(z);
+  return { significant: pValue < 0.05, better: z > 0, pValue };
+}
+
+// resolves the stats to show for one row of the range table, for the current mode
+function rangeRowStats(key) {
+  if (key === "all") {
+    const entry = modeCache[currentMode];
+    if (!entry) return { loading: true };
+    const kei =
+      entry.pvp.battles > 0
+        ? entry.pvp.damage_scouting / entry.pvp.battles / 1000 + entry.winRate
+        : null;
+    return { available: true, pvp: entry.pvp, winRate: entry.winRate, pr: entry.pr, kei };
+  }
+
+  const w = windowsCache[currentMode]?.windows?.[key];
+  if (!w) return { loading: true };
+  if (!w.available) return { available: false, unlocksAt: w.unlocksAt, reason: w.reason };
+
+  const winRate = w.battles > 0 ? (w.wins / w.battles) * 100 : 0;
+  // windowed PR: diff this mode's live per-ship totals against the per-ship baseline
+  // snapshot for this window, then run the actual-vs-expected formula on the deltas
+  const shipWindow = shipWindowsCache[currentMode]?.windows?.[key];
+  const liveShips = modeCache[currentMode]?.ships;
+  const pr =
+    w.battles > 0 && shipWindow?.available && liveShips && expectedData
+      ? calculatePRFromShipTotals(
+          diffShipTotals(liveShips, battleModeConfig[currentMode].statsField, shipWindow.ships),
+          expectedData,
+        )
+      : null;
+  const kei = w.battles > 0 ? w.damage_scouting / w.battles / 1000 + winRate : null;
+  const overall = modeCache[currentMode]?.pvp;
+  const significance =
+    w.battles > 0 && overall
+      ? winrateSignificance(w.battles, w.wins, overall.battles, overall.wins)
+      : null;
+  return { available: true, pvp: w, winRate, pr, kei, approximate: w.approximate, significance };
+}
+
+// windowed ranges shown as table rows — "all" (Overall) gets its own hero card instead,
+// see renderOverallHero
+const windowedRangeOrder = rangeOrder.filter((key) => key !== "all");
+
+// (re)builds the Overall hero card for the current mode
+function renderOverallHero() {
+  const hero = document.getElementById("overall-hero");
+  const stats = rangeRowStats("all");
+
+  if (stats.loading) {
+    hero.innerHTML = `<div class="loading"><div class="spinner"></div><p>Loading overall stats...</p></div>`;
+    return;
+  }
+
+  // caption showing how far the value is from the next tier up, colored with that tier's
+  // color rather than the value's own current-tier color
+  const nextTierCaption = (value, cutoffs, suffix = "") => {
+    const next = nextTierGap(value, cutoffs);
+    return next
+      ? `<div class="hero-next" style="color:${next.color}">+${next.gap.toFixed(2)}${suffix} to ${next.label}</div>`
+      : "";
+  };
+
+  const { pvp, winRate, pr, kei } = stats;
+  const battles = pvp.battles;
+  const hasBattles = battles > 0;
+  const wr = hasBattles
+    ? `<span style="color:${wrColor(winRate)}">${winRate.toFixed(2)}%</span> <span class="hero-tier" style="color:${wrColor(winRate)}">${TIER_LABELS[wrColor(winRate)]}</span>${nextTierCaption(winRate, WR_TIER_CUTOFFS, "%")}`
+    : `<span class="placeholder">--</span>`;
+  const avgDmg = hasBattles
+    ? Math.round(pvp.damage_dealt / battles).toLocaleString()
+    : `<span class="placeholder">--</span>`;
+  const prValue =
+    pr != null
+      ? `<span style="color:${prColor(pr)}">${pr.toLocaleString()}</span> <span class="hero-tier" style="color:${prColor(pr)}">${TIER_LABELS[prColor(pr)]}</span>${nextTierCaption(pr, PR_TIER_CUTOFFS)}`
+      : `<span class="placeholder">--</span>`;
+  const keiValue =
+    kei != null
+      ? `<span style="color:${keiColor(kei)}">${kei.toFixed(2)}</span> <span class="hero-tier" style="color:${keiColor(kei)}">${TIER_LABELS[keiColor(kei)]}</span>${nextTierCaption(kei, KEI_TIER_CUTOFFS)}`
+      : `<span class="placeholder">--</span>`;
+
+  hero.innerHTML = `
+    <div class="clan-row overall-hero-row">
+      ${clanItem("Battles", battles.toLocaleString())}
+      ${clanItem("Win Rate", wr)}
+      ${clanItem("Avg. Damage", avgDmg)}
+      <div class="clan-divider"></div>
+      ${clanItem(`PR <a href="https://na.wows-numbers.com/personal/rating" target="_blank" class="info-link">?</a>`, prValue)}
+      ${clanItem(`KEI <a href="/kei" target="_blank" class="info-link">?</a>`, keiValue)}
+    </div>
+  `;
+}
+
+// (re)builds the Range table for the current mode
+function renderRangeTable() {
+  renderOverallHero();
+
+  const container = document.getElementById("range-toggle");
+  if (!modeCache[currentMode]) {
+    container.innerHTML = `<div class="loading"><div class="spinner"></div><p>Loading ranges...</p></div>`;
+    return;
+  }
+
+  const rowStats = windowedRangeOrder.map((key) => ({ key, stats: rangeRowStats(key) }));
+
+  const rows = rowStats
+    .map(({ key, stats }) => {
+      const label = rangeTableLabels[key];
+
+      if (stats.loading) {
+        return `<tr class="range-row locked"><td>${label}</td><td class="placeholder">--</td><td class="placeholder">--</td><td class="placeholder">--</td><td class="placeholder">--</td><td class="placeholder">--</td><td>Loading…</td></tr>`;
+      }
+
+      if (!stats.available) {
+        const status = stats.reason
+          ? stats.reason
+          : stats.unlocksAt
+            ? `Unlocks ${new Date(stats.unlocksAt).toLocaleDateString()}`
+            : "Not tracked yet";
+        return `
+          <tr class="range-row locked" data-range="${key}">
+            <td>${label}</td>
+            <td class="placeholder">--</td>
+            <td class="placeholder">--</td>
+            <td class="placeholder">--</td>
+            <td class="placeholder">--</td>
+            <td class="placeholder">--</td>
+            <td>${status}</td>
+          </tr>
+        `;
+      }
+
+      const { pvp, winRate, pr, kei, approximate, significance } = stats;
+      const battles = pvp.battles;
+      const hasBattles = battles > 0;
+      const sigDot = significance
+        ? significance.significant
+          ? `<span class="sig-dot ${significance.better ? "sig-up" : "sig-down"}" title="Statistically significant ${significance.better ? "improvement" : "decline"}"></span>`
+          : `<span class="sig-dot sig-none" title="Not Statistically Significant"></span>`
+        : "";
+      const wr = hasBattles
+        ? `<span style="color:${wrColor(winRate)}">${winRate.toFixed(2)}%</span>${sigDot}`
+        : `<span class="placeholder">--</span>`;
+      const avgDmg = hasBattles
+        ? Math.round(pvp.damage_dealt / battles).toLocaleString()
+        : `<span class="placeholder">--</span>`;
+      const prCell =
+        pr != null
+          ? `<span style="color:${prColor(pr)}">${pr.toLocaleString()}</span>`
+          : `<span class="placeholder">--</span>`;
+      const keiCell =
+        kei != null
+          ? `<span style="color:${keiColor(kei)}">${kei.toFixed(2)}</span>`
+          : `<span class="placeholder">--</span>`;
+      const status = !hasBattles
+        ? "No battles on record"
+        : approximate
+          ? `Since ${new Date(pvp.since).toLocaleDateString()}`
+          : "";
+      const activeClass = key === currentRange ? " active" : "";
+
+      return `
+        <tr class="range-row${activeClass}" data-range="${key}">
+          <td>${label}</td>
+          <td>${battles.toLocaleString()}</td>
+          <td>${wr}</td>
+          <td>${avgDmg}</td>
+          <td>${prCell}</td>
+          <td>${keiCell}</td>
+          <td>${status}</td>
+        </tr>
+      `;
+    })
+    .join("");
+
+  const legend = `<p class="range-note"><span class="sig-dot sig-up"></span> significant improvement · <span class="sig-dot sig-down"></span> significant decline · <span class="sig-dot sig-none"></span> not statistically significant <a href="/significance" target="_blank" class="info-link">?</a></p>`;
+
+  container.innerHTML = `
+    <div class="table-wrapper">
+      <table>
+        <thead>
+          <tr><th>Range</th><th>Battles</th><th>Win Rate</th><th>Avg. Damage</th><th>PR</th><th>KEI</th><th>Status</th></tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+    ${legend}
+  `;
+}
+
+// Charts card: winrate/avg. damage/KEI/PR-over-time, from recorded snapshots
+let winrateHistoryChart = null;
+let damageHistoryChart = null;
+let keiHistoryChart = null;
+let prHistoryChart = null;
+const historyCache = {};
+const historyPromiseCache = {};
+const shipHistoryCache = {};
+const shipHistoryPromiseCache = {};
+
+function fetchStatHistory(mode) {
+  if (!historyPromiseCache[mode]) {
+    historyPromiseCache[mode] = fetch(`/api/player/${username}/stat-history?mode=${mode}`)
+      .then((r) => r.json())
+      .then((data) => {
+        historyCache[mode] = data.history ?? [];
+        return historyCache[mode];
+      })
+      .catch((err) => {
+        console.error(`Error loading stat history for ${mode}:`, err);
+        historyCache[mode] = [];
+        return historyCache[mode];
+      });
+  }
+  return historyPromiseCache[mode];
+}
+
+function fetchShipStatHistory(mode) {
+  if (!shipHistoryPromiseCache[mode]) {
+    shipHistoryPromiseCache[mode] = fetch(`/api/player/${username}/ship-stat-history?mode=${mode}`)
+      .then((r) => r.json())
+      .then((data) => {
+        shipHistoryCache[mode] = data.history ?? [];
+        return shipHistoryCache[mode];
+      })
+      .catch((err) => {
+        console.error(`Error loading ship stat history for ${mode}:`, err);
+        shipHistoryCache[mode] = [];
+        return shipHistoryCache[mode];
+      });
+  }
+  return shipHistoryPromiseCache[mode];
+}
+
+// short MM.DD label for chart axes, instead of the full locale date string
+function formatChartDate(date) {
+  const d = new Date(date);
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${month}.${day}`;
+}
+
+// MM.DD.YYYY, HH:MM AM/PM, for the player header's Last Battle date
+function formatMMDDYYYY(date) {
+  const d = new Date(date);
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${month}.${day}.${d.getFullYear()}, ${d.toLocaleTimeString()}`;
+}
+
+// creates a line chart the first time, or updates its data on subsequent calls
+function renderLineChart(existingChart, canvas, labels, values, opts) {
+  if (existingChart) {
+    existingChart.data.labels = labels;
+    existingChart.data.datasets[0].data = values;
+    existingChart.update();
+    return existingChart;
+  }
+
+  return new Chart(canvas, {
+    type: "line",
+    data: {
+      labels,
+      datasets: [
+        {
+          label: opts.label,
+          data: values,
+          borderColor: opts.color,
+          backgroundColor: opts.bgColor,
+          fill: true,
+          tension: 0.25,
+          pointRadius: 3,
+        },
+      ],
+    },
+    options: {
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: opts.tooltipLabel } },
+      },
+      scales: {
+        x: { ticks: { color: "#e0e6ed" }, grid: { color: "#1e3448" } },
+        y: {
+          ticks: { color: "#e0e6ed", callback: opts.yTickCallback },
+          grid: { color: "#1e3448" },
+        },
+      },
+    },
+  });
+}
+
+function renderChartsCard(history) {
+  const winrateCanvas = document.getElementById("chart-winrate-history");
+  const damageCanvas = document.getElementById("chart-damage-history");
+  const keiCanvas = document.getElementById("chart-kei-history");
+
+  if (history.length < 1) {
+    winrateCanvas.style.display = "none";
+    damageCanvas.style.display = "none";
+    keiCanvas.style.display = "none";
+    let placeholder = document.getElementById("charts-history-placeholder");
+    if (!placeholder) {
+      placeholder = document.createElement("p");
+      placeholder.id = "charts-history-placeholder";
+      placeholder.className = "range-note";
+      winrateCanvas.closest(".charts-grid").insertAdjacentElement("beforebegin", placeholder);
+    }
+    placeholder.textContent =
+      "Not tracked yet — check back after this player has been looked up.";
+    return;
+  }
+
+  document.getElementById("charts-history-placeholder")?.remove();
+  winrateCanvas.style.display = "";
+  damageCanvas.style.display = "";
+  keiCanvas.style.display = "";
+
+  const labels = history.map((h) => formatChartDate(h.recordedAt));
+
+  winrateHistoryChart = renderLineChart(
+    winrateHistoryChart,
+    winrateCanvas,
+    labels,
+    history.map((h) => (h.winrate * 100).toFixed(2)),
+    {
+      label: "Winrate",
+      color: "#3498db",
+      bgColor: "rgba(52, 152, 219, 0.15)",
+      tooltipLabel: (ctx) => `${ctx.parsed.y}% winrate`,
+      yTickCallback: (v) => `${v}%`,
+    },
+  );
+
+  damageHistoryChart = renderLineChart(
+    damageHistoryChart,
+    damageCanvas,
+    labels,
+    history.map((h) => Math.round(h.avgDamage)),
+    {
+      label: "Avg. Damage",
+      color: "#e67e22",
+      bgColor: "rgba(230, 126, 34, 0.15)",
+      tooltipLabel: (ctx) => `${ctx.parsed.y.toLocaleString()} avg. damage`,
+      yTickCallback: (v) => v.toLocaleString(),
+    },
+  );
+
+  keiHistoryChart = renderLineChart(
+    keiHistoryChart,
+    keiCanvas,
+    labels,
+    history.map((h) => h.kei.toFixed(2)),
+    {
+      label: "KEI",
+      color: "#9b59b6",
+      bgColor: "rgba(155, 89, 182, 0.15)",
+      tooltipLabel: (ctx) => `${ctx.parsed.y} KEI`,
+      yTickCallback: (v) => v,
+    },
+  );
+}
+
+// PR-over-time, computed from the per-ship snapshot history (player_ship_stat_history)
+// against today's expected values — same data source and cadence as the winrate/damage/KEI
+// charts, just run through the actual-vs-expected formula per snapshot
+function renderPRChart() {
+  const canvas = document.getElementById("chart-pr-history");
+  const history = shipHistoryCache[currentMode];
+
+  if (!expectedData || !history || history.length === 0) {
+    canvas.style.display = "none";
+    let placeholder = document.getElementById("pr-history-placeholder");
+    if (!placeholder) {
+      placeholder = document.createElement("p");
+      placeholder.id = "pr-history-placeholder";
+      placeholder.className = "range-note";
+      canvas.insertAdjacentElement("afterend", placeholder);
+    }
+    placeholder.textContent = expectedData
+      ? "Not tracked yet — check back after this player has been looked up again."
+      : "PR isn't available for this player.";
+    return;
+  }
+
+  document.getElementById("pr-history-placeholder")?.remove();
+  canvas.style.display = "";
+
+  const labels = history.map((h) => formatChartDate(h.recordedAt));
+  const values = history.map((h) => calculatePRFromShipTotals(h.ships, expectedData));
+
+  prHistoryChart = renderLineChart(
+    prHistoryChart,
+    canvas,
+    labels,
+    values,
+    {
+      label: "PR",
+      color: "#c9a84c",
+      bgColor: "rgba(201, 168, 76, 0.15)",
+      tooltipLabel: (ctx) => `${ctx.parsed.y.toLocaleString()} PR`,
+      yTickCallback: (v) => v.toLocaleString(),
+    },
+  );
+}
+
+// "next update" countdown, based on when the next stat snapshot for this player will be due
+function formatCountdown(target) {
+  const diffMs = new Date(target).getTime() - Date.now();
+  if (diffMs <= 0) {
+    return "The next update is available now — look this player up again to record it.";
+  }
+  const totalMinutes = Math.ceil(diffMs / 60000);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  const parts = [];
+  if (hours > 0) parts.push(`${hours}h`);
+  parts.push(`${minutes}m`);
+  return `Next update available in ${parts.join(" ")}.`;
+}
+
+function renderNextUpdateNote() {
+  const note = document.getElementById("next-update-note");
+  const nextSnapshotAt = nextSnapshotAtByMode[currentMode];
+  note.textContent = nextSnapshotAt
+    ? formatCountdown(nextSnapshotAt)
+    : "This will start tracking the first time this player is looked up.";
+}
+
+setInterval(renderNextUpdateNote, 30000);
 
 // shared state for the ships table + charts so they can be re-rendered per battle-type mode
 let sortCol = "battles";
@@ -47,31 +584,36 @@ const battleModeConfig = {
   coop: { statsField: "pve", endpoint: "coop", shipsExtra: "pve" },
 };
 
-const battleModeLabels = {
-  pvp: "Random Battles",
-  solo: "Solo",
-  div2: "Double Division",
-  div3: "Triple Division",
-  rank: "Ranked Battles",
-  coop: "Co-Op Battles",
-};
-
 function tryRenderPlayerDetails() {
   if (!accountData || captainTitle === null || !initialPrReady) return;
+
+  const developerTag = DEVELOPER_ACCOUNT_IDS.has(String(accountId))
+    ? `<span class="skill-tag developer-tag">Developer</span>`
+    : "";
+  const hipperTag = HIPPER_ENTHUSIAST_ACCOUNT_IDS.has(String(accountId))
+    ? `<span class="skill-tag hipper-tag">Hipper Enthusiast</span>`
+    : "";
+
+  // skill tag is always based on overall Random Battles win rate, regardless of selected
+  // mode — same rule the captain title above it follows
+  const overallWinRate = modeCache.pvp?.winRate;
+  const skillTag =
+    overallWinRate != null
+      ? `<span class="skill-tag" style="color:${wrColor(overallWinRate)}; border-color:${wrColor(overallWinRate)}">${TIER_LABELS[wrColor(overallWinRate)]} Player</span>`
+      : "";
 
   document.title = `${accountData.nickname} - KokouStats`;
   document.getElementById("player-header-container").innerHTML = `
     <div class="player-header">
       <h2><span id="clan-tag">${resolvedClanTag ? `<a href="/clan/${resolvedClanId}" class="clan-leader-link">[${resolvedClanTag}]</a>` : ""}</span>${accountData.nickname}</h2>
       <div id="captain-title" class="captain-title">${captainTitle}</div>
+      ${developerTag}${skillTag}${hipperTag}
       <div class="player-meta">
-        <span>Last Battle: ${new Date(accountData.last_battle_time * 1000).toLocaleString()}</span>
-        <span>Updated: ${new Date(accountData.stats_updated_at * 1000).toLocaleString()}</span>
+        <span>Last Battle: ${formatMMDDYYYY(accountData.last_battle_time * 1000)}</span>
       </div>
     </div>
   `;
 
-  renderStatGrid();
 }
 
 // fetches and caches the account + ship stats needed to display a given battle type
@@ -95,134 +637,46 @@ async function loadMode(mode) {
   return entry;
 }
 
-function renderStatGrid() {
-  const container = document.getElementById("stat-grid-container");
-  const entry = modeCache[currentMode];
+// range table + Charts card: shown for every battle-type mode, each tracked
+// independently via the per-mode caches above
+const rangeToggle = document.getElementById("range-toggle");
 
-  if (!entry) {
-    container.innerHTML = `<div class="loading"><div class="spinner"></div><p>Loading stats...</p></div>`;
-    return;
-  }
+// (re)loads the range table + Charts card for whichever mode is passed in, using
+// cached data where available and fetching (once, cached) otherwise
+function loadRangeAndCharts(mode) {
+  renderRangeTable();
+  renderNextUpdateNote();
+  renderPRChart();
 
-  const { pvp, winRate, currentWrColor, pr } = entry;
-
-  container.innerHTML = `
-    <div class="stat-grid">
-      <div class="stat-card stat-card-battle">
-        <h3>Battle Record</h3>
-        ${(() => {
-          const next = wrNextTier(winRate);
-          const nextText = next
-            ? `<div class="winrate-next" style="color:${wrColor(parseFloat(winRate) + parseFloat(next.needed))}">+${next.needed}% to ${next.label}</div>`
-            : "";
-          return `
-            <div class="winrate-display" style="color:${currentWrColor}">
-              <div class="metric-label">${battleModeLabels[currentMode]} Winrate</div>
-              <div class="winrate-top">
-                <div class="winrate-pct">${winRate.toFixed(2)}%</div>
-                <div class="winrate-label">${wrLabel(winRate)}</div>
-              </div>
-              ${nextText}
-            </div>
-          `;
-        })()}
-        ${(() => {
-          if (pr === null) {
-            return `
-              <div class="winrate-display" style="color:#546e7a">
-                <div class="metric-label">WoWS Numbers Personal Rating (PR) <a href="https://na.wows-numbers.com/personal/rating" target="_blank" class="info-link">?</a></div>
-                <div class="winrate-top">
-                  <div class="metric-pct">—</div>
-                  <div class="winrate-label"></div>
-                </div>
-              </div>
-            `;
-          }
-          const nextPR = prNextTier(pr);
-          const nextText = nextPR
-            ? `<div class="winrate-next" style="color:${prColor(pr + nextPR.needed)}">+${nextPR.needed} to ${nextPR.label}</div>`
-            : "";
-          return `
-            <div class="winrate-display" style="color:${prColor(pr)}">
-              <div class="metric-label">WoWS Numbers Personal Rating (PR) <a href="https://na.wows-numbers.com/personal/rating" target="_blank" class="info-link">?</a></div>
-              <div class="winrate-top">
-                <div class="metric-pct">${pr.toLocaleString()}</div>
-                <div class="winrate-label">${prLabel(pr)}</div>
-              </div>
-              ${nextText}
-            </div>
-          `;
-        })()}
-        ${(() => {
-          const kei = pvp.damage_scouting / pvp.battles / 1000 + winRate;
-          const nextKEI = keiNextTier(kei);
-          const nextKEIText = nextKEI
-            ? `<div class="winrate-next" style="color:${keiColor(kei + parseFloat(nextKEI.needed))}">+${nextKEI.needed} to ${nextKEI.label}</div>`
-            : "";
-          return `
-            <div class="winrate-display" style="color:${keiColor(kei)}">
-              <div class="metric-label">Kokou's Effectiveness Index (KEI) <a href="/kei" target="_blank" class="info-link">?</a></div>
-              <div class="winrate-top">
-                <div class="metric-pct">${kei.toFixed(2)}</div>
-                <div class="winrate-label">${keiLabel(kei)}</div>
-              </div>
-              ${nextKEIText}
-            </div>
-          `;
-        })()}
-        ${row("Battles", pvp.battles.toLocaleString())}
-        ${row("Wins", pvp.wins.toLocaleString())}
-        ${row("Losses", pvp.losses.toLocaleString())}
-        ${row("Draws", pvp.draws.toLocaleString())}
-        ${row("Survival Rate", `${((pvp.survived_battles / pvp.battles) * 100).toFixed(2)}%`)}
-      </div>
-      <div class="stat-card stat-card-medals">
-        <h3>Medals</h3>
-        <p class="wip-label">WORK IN PROGRESS</p>
-      </div>
-      <div class="stat-card">
-        <h3>Damage</h3>
-        ${row("Damage Dealt", pvp.damage_dealt.toLocaleString())}
-        ${row("Avg. Damage / Battle", (pvp.damage_dealt / pvp.battles).toLocaleString(undefined, { maximumFractionDigits: 0 }))}
-        ${row("Spotting Damage", pvp.damage_scouting.toLocaleString())}
-        ${row("Avg. Spotting / Battle", (pvp.damage_scouting / pvp.battles).toLocaleString(undefined, { maximumFractionDigits: 0 }))}
-      </div>
-      <div class="stat-card">
-        <h3>Sinks</h3>
-        ${row("Warships Sunk", pvp.frags.toLocaleString())}
-        ${row("Avg. Sunk / Battle", (pvp.frags / pvp.battles).toFixed(2))}
-        ${row("Destruction Ratio", (pvp.frags / (pvp.battles - pvp.survived_battles)).toFixed(2))}
-      </div>
-      <div class="stat-card">
-        <h3>Experience</h3>
-        ${row("Total XP", pvp.xp.toLocaleString())}
-        ${row("Avg. XP / Battle", (pvp.xp / pvp.battles).toLocaleString(undefined, { maximumFractionDigits: 0 }))}
-      </div>
-    </div>
-  `;
+  fetchWindows(mode).then(() => {
+    if (currentMode === mode) renderRangeTable();
+  });
+  fetchShipWindows(mode).then(() => {
+    if (currentMode === mode) renderRangeTable();
+  });
+  fetchStatHistory(mode).then((history) => {
+    if (currentMode === mode) renderChartsCard(history);
+  });
+  fetchShipStatHistory(mode).then(() => {
+    if (currentMode === mode) renderPRChart();
+  });
 }
 
-function tryClanRender() {
-  const clanCard = document.getElementById("clan-card");
-  if (!clanCard || !clanPayload) return;
-  const { clan, details, role, joined_at } = clanPayload;
-  clanCard.style.display = "";
-  clanCard.innerHTML = `
-    <h3>Clan</h3>
-    <div class="clan-row">
-      ${clanItem("Name", `<a href="/clan/${clanPayload.clan_id}" class="clan-leader-link">[${clan.tag}] ${clan.name}</a>`)}
-      ${clanItem("Role", roleLabel[role] ?? role)}
-      ${clanItem("Joined", new Date(joined_at * 1000).toLocaleDateString())}
-      <div class="clan-divider"></div>
-      ${clanItem("Leader", `<a href="/player/${details.leader_name}" class="clan-leader-link">${details.leader_name}</a>`)}
-      ${clanItem("Members", clan.members_count)}
-    </div>
-  `;
-}
+// event delegation: the range table is fully rebuilt on every render, so the
+// listener is attached once on the (stable) container
+rangeToggle.addEventListener("click", (e) => {
+  const row = e.target.closest("tr.range-row:not(.locked)");
+  if (!row) return;
+  const range = row.dataset.range;
+  if (range === currentRange) return;
 
-// battle type rack: switches the Battle Record stats (and PR) between
-// Random Battles, Solo, Duo Division, and Trio Division
-const battleTypeButtons = document.querySelectorAll(".battle-type-btn");
+  currentRange = range;
+  renderRangeTable();
+});
+
+// battle type rack: switches the Range table, Charts card, and ships data between
+// Random Battles, Solo, Duo Division, Trio Division, Ranked, and Co-Op
+const battleTypeButtons = document.querySelectorAll("#mode-toggle .battle-type-btn");
 battleTypeButtons.forEach((btn) => {
   btn.addEventListener("click", async () => {
     const mode = btn.dataset.mode;
@@ -231,21 +685,27 @@ battleTypeButtons.forEach((btn) => {
     battleTypeButtons.forEach((b) => b.classList.remove("active"));
     btn.classList.add("active");
     currentMode = mode;
-    renderStatGrid();
+    currentRange = "all";
+    loadRangeAndCharts(mode);
     renderShipsForMode(mode);
 
-    if (modeCache[mode]) return;
+    if (modeCache[mode]) {
+      renderRangeTable();
+      renderPRChart();
+      return;
+    }
 
     try {
       await loadMode(mode);
       if (currentMode === mode) {
-        renderStatGrid();
+        renderRangeTable();
+        renderPRChart();
         renderShipsForMode(mode);
       }
     } catch (err) {
       console.error("Error loading battle type stats:", err);
       if (currentMode === mode) {
-        document.getElementById("stat-grid-container").innerHTML =
+        document.getElementById("range-toggle").innerHTML =
           `<p>Error loading stats. Please try again later.</p>`;
         document.getElementById("ships-container").innerHTML =
           `<p>Error loading ship stats. Please try again later.</p>`;
@@ -270,12 +730,16 @@ fetch(`/api/player/${username}`)
 
     modeCache.pvp = { pvp, winRate, currentWrColor, pr: null };
     tryRenderPlayerDetails();
-    tryClanRender();
+    hideStatsUpdateModal();
+
+    // eagerly load the range table + Charts card since pvp is the default mode
+    loadRangeAndCharts("pvp");
   })
   .catch((error) => {
     console.error("Error fetching player stats:", error);
     const statsContainer = document.getElementById("stats-container");
     statsContainer.innerHTML = `<p>Error fetching player stats. Please try again later.</p>`;
+    hideStatsUpdateModal();
   });
 
 // column names and labels for the ships table, along with a function to get the value to sort by for each column
@@ -387,38 +851,37 @@ const romanNumerals = [
   "XI",
 ];
 
-const wrTiers = [
-  { threshold: 47, label: "Below Average" },
-  { threshold: 49, label: "Average" },
-  { threshold: 52, label: "Good" },
-  { threshold: 54, label: "Very Good" },
-  { threshold: 56, label: "Great" },
-  { threshold: 60, label: "Unicum" },
-  { threshold: 65, label: "Super Unicum" },
-];
+// wrColor/prColor/keiColor all share this same 8-tier color scale (just with different
+// numeric breakpoints), so the color they return doubles as a lookup key for the tier name
+const TIER_LABELS = {
+  "#a855f7": "Super Unicum",
+  "#9b59b6": "Unicum",
+  "#3498db": "Great",
+  "#1abc9c": "Very Good",
+  "#2ecc71": "Good",
+  "#f1c40f": "Average",
+  "#e67e22": "Below Average",
+  "#e74c3c": "Bad",
+};
 
-function wrNextTier(rate) {
-  const next = wrTiers.find((t) => rate < t.threshold);
-  if (!next) return null;
-  return { label: next.label, needed: (next.threshold - rate).toFixed(2) };
-}
+// ascending lower-bound cutoffs for each tier, in the same order as TIER_ORDER/TIER_COLORS —
+// must stay in sync with wrColor/prColor/keiColor above. Used only to compute the "gap to
+// next tier" hero caption, since those color functions don't expose the boundary itself.
+const TIER_ORDER = ["Bad", "Below Average", "Average", "Good", "Very Good", "Great", "Unicum", "Super Unicum"];
+const TIER_COLORS = ["#e74c3c", "#e67e22", "#f1c40f", "#2ecc71", "#1abc9c", "#3498db", "#9b59b6", "#a855f7"];
+const WR_TIER_CUTOFFS = [0, 47, 49, 52, 54, 56, 60, 65];
+const PR_TIER_CUTOFFS = [0, 750, 1100, 1350, 1550, 1750, 2100, 2450];
+const KEI_TIER_CUTOFFS = [0, 50, 58, 63, 68, 73, 80, 90];
 
-function wrLabel(rate) {
-  return rate >= 65
-    ? "Super Unicum"
-    : rate >= 60
-      ? "Unicum"
-      : rate >= 56
-        ? "Great"
-        : rate >= 54
-          ? "Very Good"
-          : rate >= 52
-            ? "Good"
-            : rate >= 49
-              ? "Average"
-              : rate >= 47
-                ? "Below Average"
-                : "Bad";
+// how far a value is from the next tier up, and what that tier is — null once already at the
+// top tier, since there's nothing further to reach
+function nextTierGap(value, cutoffs) {
+  let idx = 0;
+  for (let i = 1; i < cutoffs.length; i++) {
+    if (value >= cutoffs[i]) idx = i;
+  }
+  if (idx >= cutoffs.length - 1) return null;
+  return { label: TIER_ORDER[idx + 1], color: TIER_COLORS[idx + 1], gap: cutoffs[idx + 1] - value };
 }
 
 function wrColor(rate) {
@@ -439,38 +902,6 @@ function wrColor(rate) {
                 : "#e74c3c";
 }
 
-const prTiers = [
-  { threshold: 750, label: "Below Average" },
-  { threshold: 1100, label: "Average" },
-  { threshold: 1350, label: "Good" },
-  { threshold: 1550, label: "Very Good" },
-  { threshold: 1750, label: "Great" },
-  { threshold: 2100, label: "Unicum" },
-  { threshold: 2450, label: "Super Unicum" },
-];
-
-function prNextTier(pr) {
-  const next = prTiers.find((t) => pr < t.threshold);
-  if (!next) return null;
-  return { label: next.label, needed: next.threshold - pr };
-}
-
-const keiTiers = [
-  { threshold: 50, label: "Below Average" },
-  { threshold: 58, label: "Average" },
-  { threshold: 63, label: "Good" },
-  { threshold: 68, label: "Very Good" },
-  { threshold: 73, label: "Great" },
-  { threshold: 80, label: "Unicum" },
-  { threshold: 90, label: "Super Unicum" },
-];
-
-function keiNextTier(kei) {
-  const next = keiTiers.find((t) => kei < t.threshold);
-  if (!next) return null;
-  return { label: next.label, needed: (next.threshold - kei).toFixed(2) };
-}
-
 function keiColor(kei) {
   return kei >= 90
     ? "#a855f7"
@@ -487,42 +918,6 @@ function keiColor(kei) {
               : kei >= 50
                 ? "#e67e22"
                 : "#e74c3c";
-}
-
-function keiLabel(kei) {
-  return kei >= 90
-    ? "Super Unicum"
-    : kei >= 80
-      ? "Unicum"
-      : kei >= 73
-        ? "Great"
-        : kei >= 68
-          ? "Very Good"
-          : kei >= 63
-            ? "Good"
-            : kei >= 58
-              ? "Average"
-              : kei >= 50
-                ? "Below Average"
-                : "Bad";
-}
-
-function prLabel(pr) {
-  return pr >= 2450
-    ? "Super Unicum"
-    : pr >= 2100
-      ? "Unicum"
-      : pr >= 1750
-        ? "Great"
-        : pr >= 1550
-          ? "Very Good"
-          : pr >= 1350
-            ? "Good"
-            : pr >= 1100
-              ? "Average"
-              : pr >= 750
-                ? "Below Average"
-                : "Bad";
 }
 
 function prColor(pr) {
@@ -543,7 +938,11 @@ function prColor(pr) {
                 : "#e74c3c";
 }
 
-function calculatePR(ships, expectedData, pvpKey = "pvp") {
+// the WoWS Numbers PR formula, given per-ship actual totals ({shipId, battles, wins,
+// damageDealt, frags}) for some slice of a player's play — their whole career, a past
+// snapshot, or a windowed delta between two snapshots — compared against today's
+// per-ship expected values
+function calculatePRFromShipTotals(shipTotals, expectedData) {
   let actualDmg = 0,
     actualFrags = 0,
     actualWins = 0;
@@ -551,18 +950,22 @@ function calculatePR(ships, expectedData, pvpKey = "pvp") {
     expectedFrags = 0,
     expectedWins = 0;
 
-  ships.forEach((ship) => {
-    const pvp = ship[pvpKey];
-    if (!pvp || pvp.battles === 0) return;
-    const exp = expectedData[ship.ship_id];
-    if (!exp) return;
+  shipTotals.forEach(({ shipId, battles, wins, damageDealt, frags }) => {
+    if (!battles) return;
+    const exp = expectedData[shipId];
+    // wows-numbers returns [] (not an object) for ships it doesn't have enough samples
+    // for yet — treat that the same as no expected data for this ship
+    if (!exp || Array.isArray(exp)) return;
 
-    actualDmg += pvp.damage_dealt;
-    actualFrags += pvp.frags;
-    actualWins += pvp.wins;
-    expectedDmg += exp.average_damage_dealt * pvp.battles;
-    expectedFrags += exp.average_frags * pvp.battles;
-    expectedWins += (exp.win_rate / 100) * pvp.battles;
+    // Number(...) guards against damageDealt arriving as a numeric string (e.g. Postgres
+    // BIGINT columns come back as strings), where += would silently concatenate instead
+    // of add
+    actualDmg += Number(damageDealt);
+    actualFrags += Number(frags);
+    actualWins += Number(wins);
+    expectedDmg += exp.average_damage_dealt * battles;
+    expectedFrags += exp.average_frags * battles;
+    expectedWins += (exp.win_rate / 100) * battles;
   });
 
   if (expectedDmg === 0) return null;
@@ -576,6 +979,45 @@ function calculatePR(ships, expectedData, pvpKey = "pvp") {
   const nWins = Math.max(0, (rWins - 0.7) / 0.3);
 
   return Math.round(700 * nDmg + 300 * nFrags + 150 * nWins);
+}
+
+// reshapes a live ships response (as returned by /api/player/:username/ships, keyed by
+// ship_id/damage_dealt snake_case) into the {shipId, battles, wins, damageDealt, frags}
+// shape calculatePRFromShipTotals expects
+function normalizeShipTotals(ships, pvpKey = "pvp") {
+  return ships.map((ship) => {
+    const pvp = ship[pvpKey];
+    return {
+      shipId: ship.ship_id,
+      battles: pvp?.battles ?? 0,
+      wins: pvp?.wins ?? 0,
+      damageDealt: pvp?.damage_dealt ?? 0,
+      frags: pvp?.frags ?? 0,
+    };
+  });
+}
+
+// diffs live per-ship totals against a baseline snapshot's per-ship totals (keyed by
+// ship_id, as returned by /api/player/:username/ship-windows), for windowed PR. Ships not
+// present in the baseline (bought/first played within the window) diff against zero.
+// Negative deltas (a ship's counters look like they went backwards — stats reset, snapshot
+// skew) are clamped to zero rather than allowed to pollute the total.
+function diffShipTotals(ships, pvpKey, baselineShips) {
+  return ships.map((ship) => {
+    const pvp = ship[pvpKey];
+    const baseline = baselineShips?.[ship.ship_id];
+    return {
+      shipId: ship.ship_id,
+      battles: Math.max(0, (pvp?.battles ?? 0) - (baseline?.battles ?? 0)),
+      wins: Math.max(0, (pvp?.wins ?? 0) - (baseline?.wins ?? 0)),
+      damageDealt: Math.max(0, (pvp?.damage_dealt ?? 0) - (baseline?.damageDealt ?? 0)),
+      frags: Math.max(0, (pvp?.frags ?? 0) - (baseline?.frags ?? 0)),
+    };
+  });
+}
+
+function calculatePR(ships, expectedData, pvpKey = "pvp") {
+  return calculatePRFromShipTotals(normalizeShipTotals(ships, pvpKey), expectedData);
 }
 
 function renderShipsTable(ships, sortCol, sortAsc, pvpKey = "pvp") {
@@ -931,8 +1373,18 @@ fetch(`/api/player/${username}/ships`)
         if (modeCache.pvp) {
           modeCache.pvp.pr = expectedData ? calculatePR(ships, expectedData, "pvp") : null;
         }
+        // backfill PR for any other modes the player switched to before this resolved —
+        // loadMode() computes it inline, but only using whatever expectedData was in hand
+        // at the time
+        Object.entries(modeCache).forEach(([mode, entry]) => {
+          if (mode === "pvp" || !entry.ships) return;
+          const statsField = battleModeConfig[mode].statsField;
+          entry.pr = expectedData ? calculatePR(entry.ships, expectedData, statsField) : null;
+        });
         initialPrReady = true;
         tryRenderPlayerDetails();
+        renderPRChart();
+        renderRangeTable();
       });
   })
   .catch((error) => {
@@ -941,29 +1393,14 @@ fetch(`/api/player/${username}/ships`)
       `<p>Error fetching ship stats. Please try again later.</p>`;
   });
 
-const roleLabel = {
-  commander: "Commander",
-  executive_officer: "Executive Officer",
-  recruitment_officer: "Recruitment Officer",
-  officer: "Officer",
-  private: "Recruit",
-};
-
+// only the clan tag next to the player's name is shown on this page — see /clan/:clanId
+// for full clan details
 fetch(`/api/player/${username}/clan`)
   .then((r) => r.json())
-  .then(async (clanAccountRes) => {
+  .then((clanAccountRes) => {
     const accountId = Object.keys(clanAccountRes.data)[0];
     const membership = clanAccountRes.data[accountId];
     if (!membership) return;
-
-    const { clan_id, joined_at, role, clan } = membership;
-
-    const clanRes = await fetch(`/api/clan/${clan_id}`);
-    const clanData = await clanRes.json();
-    const details = clanData.data[clan_id];
-
-    applyClanTag(clan.tag, clan_id);
-    clanPayload = { clan, clan_id, details, role, joined_at };
-    tryClanRender();
+    applyClanTag(membership.clan.tag, membership.clan_id);
   })
   .catch((err) => console.error("Error fetching clan data:", err));
