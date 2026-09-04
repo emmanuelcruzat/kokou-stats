@@ -85,6 +85,11 @@ app.get("/kei", async (req, res) => {
   res.sendFile(__dirname + "/public/kei.html");
 });
 
+// route to serve the page explaining the range table's statistical significance indicator
+app.get("/significance", async (req, res) => {
+  res.sendFile(__dirname + "/public/significance.html");
+});
+
 // API ROUTES
 app.get("/api/myip", async (req, res) => {
   const response = await axios.get("https://api.ipify.org?format=json");

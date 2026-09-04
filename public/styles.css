@@ -354,6 +354,27 @@ tr.range-row.locked td {
   color: var(--text-faint);
 }
 
+.sig-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-left: 0.4rem;
+  vertical-align: middle;
+}
+
+.sig-dot.sig-up {
+  background-color: #2ecc71;
+}
+
+.sig-dot.sig-down {
+  background-color: #e74c3c;
+}
+
+.sig-dot.sig-none {
+  background-color: var(--text-faint);
+}
+
 .clan-row {
   display: flex;
   gap: 2.5rem;

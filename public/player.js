@@ -72,6 +72,42 @@ function fetchWindows(mode) {
   return windowsPromiseCache[mode];
 }
 
+// standard normal CDF (Abramowitz & Stegun 7.1.26 approximation, ~7 decimal places accurate)
+function normalCdf(x) {
+  const t = 1 / (1 + 0.2316419 * Math.abs(x));
+  const d = 0.3989423 * Math.exp((-x * x) / 2);
+  let prob = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274))));
+  if (x > 0) prob = 1 - prob;
+  return prob;
+}
+
+// two-tailed p-value for a z statistic
+function twoTailedPValue(z) {
+  return 2 * (1 - normalCdf(Math.abs(z)));
+}
+
+// two-proportion z-test comparing a window's win rate against the player's win rate in
+// everything OUTSIDE that window (not the raw lifetime rate, which would double-count the
+// window itself). Tells apart a real shift in skill from ordinary streak variance — small
+// samples naturally need a much bigger gap to clear the bar, since the standard error grows
+// as either sample shrinks. Standard p < 0.05 (two-tailed) is the bar for "significant";
+// p < 0.01 for "strong".
+function winrateSignificance(windowBattles, windowWins, overallBattles, overallWins) {
+  const priorBattles = overallBattles - windowBattles;
+  const priorWins = overallWins - windowWins;
+  if (priorBattles <= 0 || windowBattles <= 0) return null;
+
+  const p1 = priorWins / priorBattles;
+  const p2 = windowWins / windowBattles;
+  const pooled = (priorWins + windowWins) / (priorBattles + windowBattles);
+  const se = Math.sqrt(pooled * (1 - pooled) * (1 / priorBattles + 1 / windowBattles));
+  if (!se) return null;
+
+  const z = (p2 - p1) / se;
+  const pValue = twoTailedPValue(z);
+  return { significant: pValue < 0.05, better: z > 0, pValue };
+}
+
 // resolves the stats to show for one row of the range table, for the current mode
 function rangeRowStats(key) {
   if (key === "all") {
@@ -92,7 +128,12 @@ function rangeRowStats(key) {
   // PR needs per-ship expected-value data we don't snapshot, so it's only ever
   // available for the lifetime "Overall" row, not windowed ranges
   const kei = w.battles > 0 ? w.damage_scouting / w.battles / 1000 + winRate : null;
-  return { available: true, pvp: w, winRate, pr: null, kei, approximate: w.approximate };
+  const overall = modeCache[currentMode]?.pvp;
+  const significance =
+    w.battles > 0 && overall
+      ? winrateSignificance(w.battles, w.wins, overall.battles, overall.wins)
+      : null;
+  return { available: true, pvp: w, winRate, pr: null, kei, approximate: w.approximate, significance };
 }
 
 // (re)builds the Range table for the current mode
@@ -103,8 +144,9 @@ function renderRangeTable() {
     return;
   }
 
-  const rows = rangeOrder
-    .map((key) => ({ key, stats: rangeRowStats(key) }))
+  const rowStats = rangeOrder.map((key) => ({ key, stats: rangeRowStats(key) }));
+
+  const rows = rowStats
     .map(({ key, stats }) => {
       const label = rangeTableLabels[key];
 
@@ -131,11 +173,16 @@ function renderRangeTable() {
         `;
       }
 
-      const { pvp, winRate, pr, kei, approximate } = stats;
+      const { pvp, winRate, pr, kei, approximate, significance } = stats;
       const battles = pvp.battles;
       const hasBattles = battles > 0;
+      const sigDot = significance
+        ? significance.significant
+          ? `<span class="sig-dot ${significance.better ? "sig-up" : "sig-down"}" title="Statistically significant ${significance.better ? "improvement" : "decline"}"></span>`
+          : `<span class="sig-dot sig-none" title="Not Statistically Significant"></span>`
+        : "";
       const wr = hasBattles
-        ? `<span style="color:${wrColor(winRate)}">${winRate.toFixed(2)}%</span>`
+        ? `<span style="color:${wrColor(winRate)}">${winRate.toFixed(2)}%</span>${sigDot}`
         : `<span class="placeholder">--</span>`;
       const avgDmg = hasBattles
         ? Math.round(pvp.damage_dealt / battles).toLocaleString()
@@ -149,7 +196,7 @@ function renderRangeTable() {
           ? `<span style="color:${keiColor(kei)}">${kei.toFixed(2)}</span>`
           : `<span class="placeholder">--</span>`;
       const status = !hasBattles
-        ? "No battles"
+        ? "No battles on record"
         : approximate
           ? `Since ${new Date(pvp.since).toLocaleDateString()}`
           : "";
@@ -169,6 +216,8 @@ function renderRangeTable() {
     })
     .join("");
 
+  const legend = `<p class="range-note"><span class="sig-dot sig-up"></span> significant improvement · <span class="sig-dot sig-down"></span> significant decline · <span class="sig-dot sig-none"></span> not statistically significant <a href="/significance" target="_blank" class="info-link">?</a></p>`;
+
   container.innerHTML = `
     <div class="table-wrapper">
       <table>
@@ -178,6 +227,7 @@ function renderRangeTable() {
         <tbody>${rows}</tbody>
       </table>
     </div>
+    ${legend}
   `;
 }
 
