@@ -17,6 +17,7 @@ function hideStatsUpdateModal() {
 
 let resolvedClanTag = null;
 let resolvedClanId = null;
+let clanPayload = null;
 
 function applyClanTag(tag, id) {
   resolvedClanTag = tag;
@@ -587,21 +588,6 @@ const battleModeConfig = {
 function tryRenderPlayerDetails() {
   if (!accountData || captainTitle === null || !initialPrReady) return;
 
-  const developerTag = DEVELOPER_ACCOUNT_IDS.has(String(accountId))
-    ? `<span class="skill-tag developer-tag">Developer</span>`
-    : "";
-  const hipperTag = HIPPER_ENTHUSIAST_ACCOUNT_IDS.has(String(accountId))
-    ? `<span class="skill-tag hipper-tag">Hipper Enthusiast</span>`
-    : "";
-
-  // skill tag is always based on overall Random Battles win rate, regardless of selected
-  // mode — same rule the captain title above it follows
-  const overallWinRate = modeCache.pvp?.winRate;
-  const skillTag =
-    overallWinRate != null
-      ? `<span class="skill-tag" style="color:${wrColor(overallWinRate)}; border-color:${wrColor(overallWinRate)}">${TIER_LABELS[wrColor(overallWinRate)]} Player</span>`
-      : "";
-
   document.title = `${accountData.nickname} - KokouStats`;
   document.getElementById("player-header-container").innerHTML = `
     <div class="player-header">
@@ -662,13 +648,23 @@ function loadRangeAndCharts(mode) {
   });
 }
 
-// event delegation: the range table is fully rebuilt on every render, so the
-// listener is attached once on the (stable) container
-rangeToggle.addEventListener("click", (e) => {
-  const row = e.target.closest("tr.range-row:not(.locked)");
-  if (!row) return;
-  const range = row.dataset.range;
-  if (range === currentRange) return;
+function tryClanRender() {
+  const clanCard = document.getElementById("clan-card");
+  if (!clanCard || !clanPayload) return;
+  const { clan, details, role, joined_at } = clanPayload;
+  clanCard.style.display = "";
+  clanCard.innerHTML = `
+    <h3>Clan</h3>
+    <div class="clan-row">
+      ${clanItem("Name", `<a href="/clan/${clanPayload.clan_id}" class="clan-leader-link">[${clan.tag}] ${clan.name}</a>`)}
+      ${clanItem("Role", roleLabel[role] ?? role)}
+      ${clanItem("Joined", new Date(joined_at * 1000).toLocaleDateString())}
+      <div class="clan-divider"></div>
+      ${clanItem("Leader", `<a href="/player/${details.leader_name}" class="clan-leader-link">${details.leader_name}</a>`)}
+      ${clanItem("Members", clan.members_count)}
+    </div>
+  `;
+}
 
   currentRange = range;
   renderRangeTable();
@@ -1401,6 +1397,15 @@ fetch(`/api/player/${username}/clan`)
     const accountId = Object.keys(clanAccountRes.data)[0];
     const membership = clanAccountRes.data[accountId];
     if (!membership) return;
-    applyClanTag(membership.clan.tag, membership.clan_id);
+
+    const { clan_id, joined_at, role, clan } = membership;
+
+    const clanRes = await fetch(`/api/clan/${clan_id}`);
+    const clanData = await clanRes.json();
+    const details = clanData.data[clan_id];
+
+    applyClanTag(clan.tag, clan_id);
+    clanPayload = { clan, clan_id, details, role, joined_at };
+    tryClanRender();
   })
   .catch((err) => console.error("Error fetching clan data:", err));
