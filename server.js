@@ -1,7 +1,18 @@
 require("dotenv").config();
 const express = require("express");
 const axios = require("axios");
-const { pool, recordWinrate } = require("./db");
+const {
+  pool,
+  recordWinrate,
+  recordStatSnapshot,
+  getStatWindows,
+  getStatHistory,
+  recordShipStatSnapshot,
+  getShipStatWindows,
+  getShipStatHistory,
+  recordCrawlResult,
+  getCrawlStatus,
+} = require("./db");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -12,54 +23,7 @@ async function getAccountId(username) {
   const searchRes = await axios.get(
     `https://api.worldofwarships.com/wows/account/list/?application_id=${process.env.WOWS_API_KEY}&search=${username}`,
   );
-
-  const results = searchRes.data?.data;
-  if (!results || results.length === 0) {
-    const apiError = searchRes.data?.error;
-    throw new Error(
-      apiError
-        ? `Wargaming API error: ${apiError.message} (field: ${apiError.field ?? "n/a"})`
-        : `No NA-server player found matching "${username}"`,
-    );
-  }
-
-  return results[0].account_id;
-}
-
-// maps each battle-type mode (as used by the frontend's battle-type tabs) to the
-// Wargaming statistics field that holds its stats, and to the battle_type tag used in
-// player_stat_history. "pvp" needs no `extra` param since account/info includes it by default.
-const BATTLE_TYPE_FIELDS = {
-  pvp: "pvp",
-  solo: "pvp_solo",
-  div2: "pvp_div2",
-  div3: "pvp_div3",
-  rank: "rank_solo",
-  coop: "pve",
-};
-
-// the reverse of BATTLE_TYPE_FIELDS: which mode a ships-endpoint `extra` stats field
-// belongs to, for tagging per-ship snapshots
-const FIELD_TO_BATTLE_TYPE = Object.fromEntries(
-  Object.entries(BATTLE_TYPE_FIELDS).map(([mode, field]) => [field, mode]),
-);
-
-// resolves a validated battle-type mode from a query param, defaulting to "pvp"
-function resolveMode(rawMode) {
-  return Object.prototype.hasOwnProperty.call(BATTLE_TYPE_FIELDS, rawMode) ? rawMode : "pvp";
-}
-
-// records a stat snapshot for one battle type if the player has battles in it, and
-// returns whether a new snapshot was actually recorded
-async function recordModeSnapshot(accountId, username, mode, statsField, accountData) {
-  const stats = accountData.data.data[accountId]?.statistics?.[statsField];
-  if (!stats || stats.battles === 0) return false;
-  try {
-    return await recordStatSnapshot(accountId, username, mode, stats);
-  } catch (err) {
-    console.error(`Error recording ${mode} stat snapshot:`, err.message);
-    return false;
-  }
+  return searchRes.data.data[0].account_id;
 }
 
 // route to serve the player stats page
@@ -85,11 +49,6 @@ app.get("/about", async (req, res) => {
 // route to serve the page explaining Kokou's Effectiveness Index (KEI)
 app.get("/kei", async (req, res) => {
   res.sendFile(__dirname + "/public/kei.html");
-});
-
-// route to serve the page explaining the range table's statistical significance indicator
-app.get("/significance", async (req, res) => {
-  res.sendFile(__dirname + "/public/significance.html");
 });
 
 // API ROUTES
@@ -139,8 +98,7 @@ app.get("/api/player/:username/solo", async (req, res) => {
       `https://api.worldofwarships.com/wows/account/info/?application_id=${process.env.WOWS_API_KEY}&account_id=${accountId}&extra=statistics.pvp_solo`,
     );
     console.log("Account data:", JSON.stringify(accountData.data));
-    const snapshotRecorded = await recordModeSnapshot(accountId, username, "solo", "pvp_solo", accountData);
-    res.json({ ...accountData.data, snapshotRecorded });
+    res.json(accountData.data);
   } catch (err) {
     console.error("Error fetching player stats:", err.message);
     console.error("Stack:", err.stack);
@@ -159,8 +117,7 @@ app.get("/api/player/:username/div2", async (req, res) => {
       `https://api.worldofwarships.com/wows/account/info/?application_id=${process.env.WOWS_API_KEY}&account_id=${accountId}&extra=statistics.pvp_div2`,
     );
     console.log("Account data:", JSON.stringify(accountData.data));
-    const snapshotRecorded = await recordModeSnapshot(accountId, username, "div2", "pvp_div2", accountData);
-    res.json({ ...accountData.data, snapshotRecorded });
+    res.json(accountData.data);
   } catch (err) {
     console.error("Error fetching player stats:", err.message);
     console.error("Stack:", err.stack);
@@ -179,8 +136,7 @@ app.get("/api/player/:username/div3", async (req, res) => {
       `https://api.worldofwarships.com/wows/account/info/?application_id=${process.env.WOWS_API_KEY}&account_id=${accountId}&extra=statistics.pvp_div3`,
     );
     console.log("Account data:", JSON.stringify(accountData.data));
-    const snapshotRecorded = await recordModeSnapshot(accountId, username, "div3", "pvp_div3", accountData);
-    res.json({ ...accountData.data, snapshotRecorded });
+    res.json(accountData.data);
   } catch (err) {
     console.error("Error fetching player stats:", err.message);
     console.error("Stack:", err.stack);
@@ -199,8 +155,7 @@ app.get("/api/player/:username/rank", async (req, res) => {
       `https://api.worldofwarships.com/wows/account/info/?application_id=${process.env.WOWS_API_KEY}&account_id=${accountId}&extra=statistics.rank_solo`,
     );
     console.log("Account data:", JSON.stringify(accountData.data));
-    const snapshotRecorded = await recordModeSnapshot(accountId, username, "rank", "rank_solo", accountData);
-    res.json({ ...accountData.data, snapshotRecorded });
+    res.json(accountData.data);
   } catch (err) {
     console.error("Error fetching player stats:", err.message);
     console.error("Stack:", err.stack);
@@ -219,92 +174,13 @@ app.get("/api/player/:username/coop", async (req, res) => {
       `https://api.worldofwarships.com/wows/account/info/?application_id=${process.env.WOWS_API_KEY}&account_id=${accountId}&extra=statistics.pve`,
     );
     console.log("Account data:", JSON.stringify(accountData.data));
-    const snapshotRecorded = await recordModeSnapshot(accountId, username, "coop", "pve", accountData);
-    res.json({ ...accountData.data, snapshotRecorded });
+    res.json(accountData.data);
   } catch (err) {
     console.error("Error fetching player stats:", err.message);
     console.error("Stack:", err.stack);
     if (err.response)
       console.error("Wargaming response:", JSON.stringify(err.response.data));
     res.status(500).json({ error: "Failed to fetch player stats" });
-  }
-});
-
-// windowed (24h/7d/30d/90d/365d) stats for a player in a given battle-type mode (?mode=,
-// defaulting to "pvp"), computed by diffing their current lifetime totals against our own
-// recorded history snapshots for that mode.
-app.get("/api/player/:username/windows", async (req, res) => {
-  try {
-    const username = req.params.username;
-    const mode = resolveMode(req.query.mode);
-    const statsField = BATTLE_TYPE_FIELDS[mode];
-    const accountId = await getAccountId(username);
-    const extraParam = mode === "pvp" ? "" : `&extra=statistics.${statsField}`;
-    const accountData = await axios.get(
-      `https://api.worldofwarships.com/wows/account/info/?application_id=${process.env.WOWS_API_KEY}&account_id=${accountId}${extraParam}`,
-    );
-
-    const stats = accountData.data.data[accountId]?.statistics?.[statsField];
-    if (!stats) {
-      return res.status(403).json({ error: "Player statistics are hidden" });
-    }
-
-    const { trackingSince, nextSnapshotAt, windows } = await getStatWindows(accountId, mode, stats);
-    res.json({ current: stats, trackingSince, nextSnapshotAt, windows });
-  } catch (err) {
-    console.error("Error fetching windowed player stats:", err.message);
-    console.error("Stack:", err.stack);
-    res.status(500).json({ error: "Failed to fetch windowed player stats" });
-  }
-});
-
-// full history of a player's lifetime winrate, average damage, and KEI at each recorded
-// snapshot for a given battle-type mode (?mode=, defaulting to "pvp"), for the Charts
-// card on the player page
-app.get("/api/player/:username/stat-history", async (req, res) => {
-  try {
-    const username = req.params.username;
-    const mode = resolveMode(req.query.mode);
-    const accountId = await getAccountId(username);
-    const history = await getStatHistory(accountId, mode);
-    res.json({ history });
-  } catch (err) {
-    console.error("Error fetching stat history:", err.message);
-    console.error("Stack:", err.stack);
-    res.status(500).json({ error: "Failed to fetch stat history" });
-  }
-});
-
-// per-ship baseline totals for each supported window (24h/7d/30d/90d/365d), for a given
-// battle-type mode (?mode=, defaulting to "pvp"). The client diffs these against its
-// already-loaded live per-ship stats to compute an exact windowed PR.
-app.get("/api/player/:username/ship-windows", async (req, res) => {
-  try {
-    const username = req.params.username;
-    const mode = resolveMode(req.query.mode);
-    const accountId = await getAccountId(username);
-    const windows = await getShipStatWindows(accountId, mode);
-    res.json({ windows });
-  } catch (err) {
-    console.error("Error fetching windowed ship stats:", err.message);
-    console.error("Stack:", err.stack);
-    res.status(500).json({ error: "Failed to fetch windowed ship stats" });
-  }
-});
-
-// full per-snapshot history of a player's per-ship totals for a given battle-type mode
-// (?mode=, defaulting to "pvp"), for the player page's PR-over-time chart
-app.get("/api/player/:username/ship-stat-history", async (req, res) => {
-  try {
-    const username = req.params.username;
-    const mode = resolveMode(req.query.mode);
-    const accountId = await getAccountId(username);
-    const history = await getShipStatHistory(accountId, mode);
-    res.json({ history });
-  } catch (err) {
-    console.error("Error fetching ship stat history:", err.message);
-    console.error("Stack:", err.stack);
-    res.status(500).json({ error: "Failed to fetch ship stat history" });
   }
 });
 
@@ -391,42 +267,49 @@ app.get("/api/clan/:clanId", async (req, res) => {
   }
 });
 
+// fetches a clan's roster and each member's pvp winrate/battles, recording them into
+// player_winrates (used for the NA Summary page's server-wide sample). Shared by the
+// /members/stats route (triggered by visiting a clan page) and the background clan
+// crawler below (which drives the same thing without a user having to visit anything).
+async function fetchAndRecordClanMemberStats(clanId) {
+  const clanRes = await axios.get(
+    `https://api.worldofwarships.com/wows/clans/info/?application_id=${process.env.WOWS_API_KEY}&clan_id=${clanId}&extra=members`,
+  );
+  const clan = clanRes.data.data[clanId];
+  if (!clan?.members) return { found: false, result: {} };
+
+  const members = Object.values(clan.members);
+  const accountIds = members.map((m) => m.account_id);
+
+  const statsMap = {};
+  for (let i = 0; i < accountIds.length; i += 100) {
+    const chunk = accountIds.slice(i, i + 100).join(",");
+    const accountRes = await axios.get(
+      `https://api.worldofwarships.com/wows/account/info/?application_id=${process.env.WOWS_API_KEY}&account_id=${chunk}&fields=statistics.pvp.battles,statistics.pvp.wins,statistics.pvp.damage_dealt`,
+    );
+    Object.assign(statsMap, accountRes.data.data);
+  }
+
+  const result = {};
+  for (const member of members) {
+    const pvp = statsMap[member.account_id]?.statistics?.pvp;
+    const battles = pvp?.battles ?? 0;
+    const winrate = battles > 0 ? pvp.wins / pvp.battles : null;
+    if (battles > 0) {
+      recordWinrate(member.account_name, winrate, battles).catch((err) =>
+        console.error("Error recording winrate:", err.message),
+      );
+    }
+    result[member.account_id] = { battles, winrate, damage_dealt: pvp?.damage_dealt ?? 0 };
+  }
+
+  return { found: true, memberCount: members.length, result };
+}
+
 // fetches pvp winrate + battles for every clan member and records them in the DB
 app.get("/api/clan/:clanId/members/stats", async (req, res) => {
   try {
-    const clanId = req.params.clanId;
-
-    const clanRes = await axios.get(
-      `https://api.worldofwarships.com/wows/clans/info/?application_id=${process.env.WOWS_API_KEY}&clan_id=${clanId}&extra=members`,
-    );
-    const clan = clanRes.data.data[clanId];
-    if (!clan?.members) return res.json({ data: {} });
-
-    const members = Object.values(clan.members);
-    const accountIds = members.map((m) => m.account_id);
-
-    const statsMap = {};
-    for (let i = 0; i < accountIds.length; i += 100) {
-      const chunk = accountIds.slice(i, i + 100).join(",");
-      const accountRes = await axios.get(
-        `https://api.worldofwarships.com/wows/account/info/?application_id=${process.env.WOWS_API_KEY}&account_id=${chunk}&fields=statistics.pvp.battles,statistics.pvp.wins,statistics.pvp.damage_dealt`,
-      );
-      Object.assign(statsMap, accountRes.data.data);
-    }
-
-    const result = {};
-    for (const member of members) {
-      const pvp = statsMap[member.account_id]?.statistics?.pvp;
-      const battles = pvp?.battles ?? 0;
-      const winrate = battles > 0 ? pvp.wins / pvp.battles : null;
-      if (battles > 0) {
-        recordWinrate(member.account_name, winrate, battles).catch((err) =>
-          console.error("Error recording winrate:", err.message),
-        );
-      }
-      result[member.account_id] = { battles, winrate, damage_dealt: pvp?.damage_dealt ?? 0 };
-    }
-
+    const { result } = await fetchAndRecordClanMemberStats(req.params.clanId);
     res.json({ data: result });
   } catch (err) {
     console.error("Error fetching clan member stats:", err.message);
@@ -501,6 +384,64 @@ app.get("/player/:username/wr", async (req, res) => {
     accountData.data.data[accountId].statistics.pvp.wins /
       accountData.data.data[accountId].statistics.pvp.battles,
   );
+});
+
+// background clan crawler: there's no WG endpoint that lists every clan, so this sweeps
+// clan_id forward starting at 1e9 (real NA clan_ids cluster above that — confirmed by
+// probing; see the clan_crawl_state comment in db.js), recording winrates for whatever
+// roster it finds via fetchAndRecordClanMemberStats. Feeds the NA Summary page's
+// server-wide sample beyond just the clans/players someone happens to browse to. Paced by
+// CRAWL_INTERVAL_MS below to stay well under WG's API rate limit and out of the way of
+// real traffic.
+const CRAWL_INTERVAL_MS = 2500;
+let crawlInFlight = false;
+
+async function crawlNextClan() {
+  if (crawlInFlight) return;
+  crawlInFlight = true;
+  try {
+    const state = await getCrawlStatus();
+    const clanId = state.nextClanId;
+
+    let hit = false;
+    try {
+      const { found, memberCount } = await fetchAndRecordClanMemberStats(clanId);
+      hit = found;
+      if (found) {
+        console.log(`[clan crawl] clan_id ${clanId}: hit (${memberCount} members)`);
+      }
+    } catch (err) {
+      // a 404/"clan not found" from the WG API surfaces as a request error here — treat
+      // it the same as a miss rather than letting it wedge the crawler
+      hit = false;
+    }
+
+    await recordCrawlResult(clanId, hit);
+
+    const updated = await getCrawlStatus();
+    if (updated.totalChecked % 20 === 0) {
+      const pct = updated.hitRate != null ? (updated.hitRate * 100).toFixed(1) : "n/a";
+      console.log(
+        `[clan crawl] ${updated.totalChecked} checked, ${updated.totalHits} hits (${pct}%), next clan_id ${updated.nextClanId}`,
+      );
+    }
+  } catch (err) {
+    console.error("[clan crawl] tick failed:", err.message);
+  } finally {
+    crawlInFlight = false;
+  }
+}
+
+setInterval(crawlNextClan, CRAWL_INTERVAL_MS);
+
+// current progress/hit-rate of the background clan crawler
+app.get("/api/crawl-status", async (req, res) => {
+  try {
+    res.json(await getCrawlStatus());
+  } catch (err) {
+    console.error("Error fetching crawl status:", err.message);
+    res.status(500).json({ error: "Failed to fetch crawl status" });
+  }
 });
 
 app.listen(PORT, () => {
