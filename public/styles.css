@@ -55,7 +55,9 @@ body {
   display: flex;
   flex-direction: column;
   background-color: var(--bg-page);
-  transition: background-color 0.2s, color 0.2s;
+  transition:
+    background-color 0.2s,
+    color 0.2s;
   /* full-bleed sections (.page-section) use 100vw, which is wider than the visible viewport
      by the scrollbar's width — this clips that sliver instead of adding a horizontal scrollbar */
   overflow-x: hidden;
@@ -81,7 +83,9 @@ header {
   justify-content: space-between;
   gap: 1.5rem;
   border-bottom: 1px solid var(--accent);
-  transition: background-color 0.2s, border-color 0.2s;
+  transition:
+    background-color 0.2s,
+    border-color 0.2s;
 }
 
 header h1 {
@@ -278,7 +282,9 @@ main {
    main's own column via matching side padding */
 /* main's top/bottom padding is shared site-wide, so it's overridden here rather than in
    main itself — the full-bleed sections butt right up against the header and footer */
-#player-main {
+#player-main,
+#clan-main,
+#na-main {
   padding-top: 0;
   padding-bottom: 0;
 }
@@ -304,8 +310,15 @@ main {
 }
 
 #stats-container.page-section,
-#ships-container.page-section {
+#ships-container.page-section,
+#clan-stats.page-section,
+#na-stats.page-section,
+#na-why.page-section {
   background-color: var(--bg-surface);
+}
+
+#members-container.page-section {
+  background-color: var(--bg-deep);
 }
 
 .section-charts {
@@ -363,7 +376,6 @@ main {
   margin-bottom: 0.5rem;
 }
 
-
 #clan-tag {
   font-weight: 700;
   margin-right: 0.3em;
@@ -418,7 +430,6 @@ main {
 tr.range-row.active {
   background-color: var(--bg-hover);
 }
-
 
 tr.range-row.locked td {
   color: var(--text-faint);
@@ -556,7 +567,6 @@ tr.range-row.locked td {
   gap: 1rem;
 }
 
-
 .stat-card {
   background-color: var(--bg-surface);
   border: 1px solid var(--border);
@@ -651,7 +661,9 @@ tr.range-row.locked td {
   font-weight: 700;
   color: var(--text-muted);
   text-decoration: none;
-  transition: color 0.15s, border-color 0.15s;
+  transition:
+    color 0.15s,
+    border-color 0.15s;
 }
 
 .info-link:hover {
@@ -779,7 +791,6 @@ tr.range-row.locked td {
   background-color: var(--border);
 }
 
-
 .changelog-version {
   font-size: 1rem;
   font-weight: 700;
@@ -834,6 +845,17 @@ tr.range-row.locked td {
   font-size: 1.05rem;
   color: var(--text-primary);
   margin: 1.5rem 0;
+}
+
+.secondary-stats-row {
+  margin-top: 1.5rem;
+  flex-wrap: wrap;
+  row-gap: 1rem;
+}
+
+.secondary-stats-row .clan-item-value {
+  font-size: 1.4rem;
+  font-weight: 700;
 }
 
 .charts-grid {
@@ -906,7 +928,8 @@ tr.range-row.locked td {
   font-weight: 600;
 }
 
-.chart-card canvas {
+.chart-card canvas,
+#chart-winrate-distribution {
   max-height: 340px;
 }
 
@@ -940,17 +963,14 @@ tr.range-row.locked td {
   margin-bottom: 0;
 }
 
-#members-container {
-  background-color: var(--bg-surface);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 2rem;
-}
-
 #members-container h2 {
   color: var(--accent);
-  margin-bottom: 1.25rem;
-  font-size: 1.4rem;
+  font-size: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 0;
 }
 
 .table-wrapper {

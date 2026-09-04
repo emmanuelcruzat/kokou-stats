@@ -41,6 +41,7 @@ let accountId = null;
 let captainTitle = null;
 let expectedData = null;
 let initialPrReady = false;
+let percentileTag = "";
 let currentMode = "pvp";
 const modeCache = {};
 
@@ -607,7 +608,7 @@ function tryRenderPlayerDetails() {
     <div class="player-header">
       <h2><span id="clan-tag">${resolvedClanTag ? `<a href="/clan/${resolvedClanId}" class="clan-leader-link">[${resolvedClanTag}]</a>` : ""}</span>${accountData.nickname}</h2>
       <div id="captain-title" class="captain-title">${captainTitle}</div>
-      ${developerTag}${skillTag}${hipperTag}
+      ${developerTag}${skillTag}${percentileTag}${hipperTag}
       <div class="player-meta">
         <span>Last Battle: ${formatMMDDYYYY(accountData.last_battle_time * 1000)}</span>
       </div>
@@ -731,6 +732,20 @@ fetch(`/api/player/${username}`)
     modeCache.pvp = { pvp, winRate, currentWrColor, pr: null };
     tryRenderPlayerDetails();
     hideStatsUpdateModal();
+
+    // where this player's overall winrate ranks against the server-wide sample tracked on
+    // the NA Summary page — filled in async since it's a separate, non-critical lookup
+    if (pvp.battles > 0) {
+      fetch(`/api/na-server/percentile?winrate=${pvp.wins / pvp.battles}`)
+        .then((r) => r.json())
+        .then((data) => {
+          if (data.topPercent == null) return;
+          const display = data.topPercent < 1 ? "<1" : Math.round(data.topPercent);
+          percentileTag = `<span class="skill-tag" style="color:${wrColor(winRate)}; border-color:${wrColor(winRate)}">Top ${display}%</span>`;
+          tryRenderPlayerDetails();
+        })
+        .catch((err) => console.error("Error loading winrate percentile:", err));
+    }
 
     // eagerly load the range table + Charts card since pvp is the default mode
     loadRangeAndCharts("pvp");

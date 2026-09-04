@@ -105,6 +105,9 @@ function loadSummary(range) {
       if (data.totalPlayers === 0) {
         document.getElementById("dash-average-winrate").textContent = "--";
         document.getElementById("dash-average-battles").textContent = "--";
+        document.getElementById("dash-stddev").textContent = "--";
+        document.getElementById("dash-q1").textContent = "--";
+        document.getElementById("dash-q3").textContent = "--";
 
         const tierEl = document.getElementById("dash-summary-tier");
         tierEl.textContent = "no data yet";
@@ -116,14 +119,22 @@ function loadSummary(range) {
         return;
       }
 
-      document.getElementById("dash-average-winrate").textContent =
-        `${(data.averageWinrate * 100).toFixed(2)}%`;
+      const winratePct = data.averageWinrate * 100;
+      const tierColor = winrateTierColor(winratePct);
+
+      const avgWrEl = document.getElementById("dash-average-winrate");
+      avgWrEl.textContent = `${winratePct.toFixed(2)}%`;
+      avgWrEl.style.color = tierColor;
 
       document.getElementById("dash-average-battles").textContent =
         Math.round(data.averageBattles).toLocaleString();
 
-      const winratePct = data.averageWinrate * 100;
-      const tierColor = winrateTierColor(winratePct);
+      document.getElementById("dash-stddev").textContent =
+        `±${(data.stdDevWinrate * 100).toFixed(2)}%`;
+      document.getElementById("dash-q1").textContent =
+        `${(data.q1Winrate * 100).toFixed(2)}%`;
+      document.getElementById("dash-q3").textContent =
+        `${(data.q3Winrate * 100).toFixed(2)}%`;
 
       const tierEl = document.getElementById("dash-summary-tier");
       tierEl.textContent = winrateTierLabel(winratePct);
@@ -143,18 +154,5 @@ function loadRange(range) {
   loadSummary(range);
   loadDistribution(range);
 }
-
-const rangeToggle = document.getElementById("range-toggle");
-rangeToggle.addEventListener("click", (e) => {
-  const btn = e.target.closest(".battle-type-btn[data-range]");
-  if (!btn) return;
-
-  rangeToggle
-    .querySelectorAll(".battle-type-btn")
-    .forEach((b) => b.classList.remove("active"));
-  btn.classList.add("active");
-
-  loadRange(btn.dataset.range);
-});
 
 loadRange("all");

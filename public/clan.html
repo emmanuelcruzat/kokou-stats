@@ -43,8 +43,9 @@
       </nav>
     </header>
 
-    <main>
-      <section id="clan-header-container">
+    <main id="clan-main">
+      <div class="sections-stack">
+      <section id="clan-header-container" class="header-row page-section">
         <div class="loading">
           <div class="spinner"></div>
           <p>Loading clan...</p>
@@ -56,15 +57,16 @@
         <p>Unable to load clan information. Please try again later.</p>
       </section>
 
-      <section id="clan-stats" style="display: none"></section>
+      <section id="clan-stats" class="page-section" style="display: none"></section>
 
-      <section id="members-container" style="display: none">
-        <h2>Members</h2>
+      <section id="members-container" class="page-section" style="display: none">
+        <h2 class="section-title">Members</h2>
         <div class="loading">
           <div class="spinner"></div>
           <p>Loading members...</p>
         </div>
       </section>
+      </div>
     </main>
 
     <footer>
