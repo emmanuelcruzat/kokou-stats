@@ -90,12 +90,15 @@ header h1 a:hover {
 nav {
   display: flex;
   align-items: center;
+  flex: 1;
+  gap: 1.5rem;
 }
 
 nav ul {
   list-style: none;
   display: flex;
   gap: 1.5rem;
+  margin-left: auto;
 }
 
 nav a {
@@ -128,10 +131,6 @@ nav a:hover {
 }
 
 .nav-search {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
   display: flex;
   gap: 0.5rem;
 }
@@ -258,12 +257,89 @@ main {
   background-color: var(--accent-hover);
 }
 
-/* Player stats page */
+/* Player stats page — the page is three colored sections (profile through Service
+   Record, Charts & Graphs, Ships), each one card. Content inside a section uses simple
+   dividers rather than its own nested card, to keep the page from turning into boxes
+   full of boxes. */
 
-#stats-container {
+/* full-bleed bands rather than cards: break out of main's centered max-width so the
+   background/border span the full viewport, while the content inside stays aligned with
+   main's own column via matching side padding */
+/* main's top/bottom padding is shared site-wide, so it's overridden here rather than in
+   main itself — the full-bleed sections butt right up against the header and footer */
+#player-main {
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.sections-stack {
   display: flex;
   flex-direction: column;
+}
+
+.page-section {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  width: 100vw;
+  margin-left: calc(50% - 50vw);
+  margin-right: calc(50% - 50vw);
+  padding: 1.5rem max(1.5rem, calc((100vw - 1400px) / 2 + 1.5rem));
+}
+
+/* alternating gray/blue bands, using the theme's own existing surface tokens */
+.header-row.page-section {
+  background-color: var(--bg-deep);
+}
+
+#stats-container.page-section,
+#ships-container.page-section {
+  background-color: var(--bg-surface);
+}
+
+.section-charts {
+  background-color: var(--bg-deep);
+}
+
+.section-title {
+  color: var(--accent);
+  font-size: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.section-subtitle {
+  color: var(--accent);
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.section-header-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
   gap: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.section-header-row .range-note {
+  padding: 0;
+  text-align: right;
+}
+
+/* flattens Service Record (used to be its own nested card) now that the section around it
+   already provides one */
+#service-record-card {
+  background: none;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  border-top: 1px solid var(--border);
+  padding-top: 1.25rem;
 }
 
 .player-header {
@@ -336,6 +412,38 @@ main {
   gap: 2.5rem;
 }
 
+.overall-hero {
+  padding-bottom: 1.5rem;
+  margin-bottom: 1.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.overall-hero-row {
+  flex-wrap: wrap;
+  gap: 3rem;
+  row-gap: 1.5rem;
+}
+
+.overall-hero-row .clan-item-label {
+  font-size: 0.85rem;
+}
+
+.overall-hero-row .clan-item-value {
+  font-size: 2.25rem;
+  font-weight: 700;
+}
+
+.hero-tier {
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.hero-next {
+  font-size: 0.8rem;
+  font-weight: 600;
+  margin-top: 0.2rem;
+}
+
 .clan-divider {
   width: 1px;
   background-color: var(--border);
@@ -373,6 +481,30 @@ main {
   margin-bottom: 0.5rem;
 }
 
+.skill-tag {
+  display: inline-block;
+  padding: 0.15rem 0.6rem;
+  margin-bottom: 0.75rem;
+  margin-right: 0.5rem;
+  border: 1px solid;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.developer-tag {
+  color: var(--accent-contrast);
+  background-color: var(--accent);
+  border-color: var(--accent);
+}
+
+.hipper-tag {
+  color: #e74c3c;
+  border-color: #e74c3c;
+}
+
 .player-meta {
   display: flex;
   gap: 2rem;
@@ -382,7 +514,7 @@ main {
 
 .stat-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: minmax(280px, 480px);
   gap: 1rem;
 }
 
@@ -561,7 +693,7 @@ main {
   color: var(--text-muted);
   letter-spacing: 0.1em;
   text-align: center;
-  padding: 0.5rem 0;
+  padding: 1.5rem 0;
 }
 
 /* Changelog */
@@ -676,6 +808,10 @@ main {
   gap: 1rem;
 }
 
+#charts-card + .charts-grid {
+  margin-top: 1.5rem;
+}
+
 .chart-card {
   background-color: var(--bg-surface);
   border: 1px solid var(--border);
@@ -740,7 +876,23 @@ main {
   max-height: 340px;
 }
 
-/* Ships table */
+.chart-sub h4 {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--accent);
+  margin-bottom: 0.75rem;
+}
+
+.chart-sub-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+
+.chart-sub-header h4 {
+  margin-bottom: 0;
+}
 
 #ships-container,
 #members-container {
@@ -782,6 +934,17 @@ thead th {
 thead th.sortable {
   cursor: pointer;
   user-select: none;
+}
+
+/* the Range table sits inside the Service Record card already, so its header doesn't
+   need the boxed/underlined look the standalone Ships table uses */
+.range-panel thead th {
+  background-color: transparent;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border);
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
 }
 
 thead th.sortable:hover {
