@@ -929,7 +929,8 @@ tr.range-row.locked td {
 }
 
 .chart-card canvas,
-#chart-winrate-distribution {
+#chart-winrate-distribution,
+#chart-winrate-by-battles {
   max-height: 340px;
 }
 
