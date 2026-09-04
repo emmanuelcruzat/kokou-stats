@@ -182,6 +182,41 @@ nav a:hover {
   background-color: var(--accent-hover);
 }
 
+/* Search suggestions dropdown — shared by the navbar search and the home page search
+   card. Positioned absolutely by search.js to match the associated input's own
+   position/size, since the two forms lay their input out differently. */
+
+.search-suggestions {
+  /* explicit display/gap/margin overrides needed because "nav ul" (styles.css above)
+     otherwise turns this into a horizontal flex row when it's the navbar's dropdown */
+  display: block;
+  position: absolute;
+  list-style: none;
+  margin: 0;
+  gap: 0;
+  padding: 0.25rem 0;
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
+  max-height: 260px;
+  overflow-y: auto;
+  z-index: 30;
+}
+
+.search-suggestions li {
+  padding: 0.5rem 0.9rem;
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.search-suggestions li:hover,
+.search-suggestions li.active {
+  background-color: var(--bg-hover);
+  color: var(--accent);
+}
+
 /* Main */
 
 main {
@@ -853,6 +888,20 @@ tr.range-row.locked td {
   row-gap: 1rem;
 }
 
+.bucket-row-caption {
+  margin-top: 1.5rem;
+  margin-bottom: 0.5rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+}
+
+.bucket-row-caption + .secondary-stats-row {
+  margin-top: 0;
+}
+
 .secondary-stats-row .clan-item-value {
   font-size: 1.4rem;
   font-weight: 700;
@@ -929,9 +978,15 @@ tr.range-row.locked td {
 }
 
 .chart-card canvas,
-#chart-winrate-distribution,
-#chart-winrate-by-battles {
+#chart-winrate-distribution {
   max-height: 340px;
+}
+
+/* half as wide as the winrate distribution chart above it; fixed height since the chart
+   inside uses maintainAspectRatio: false rather than shrinking proportionally with width */
+.chart-half-width {
+  width: 50%;
+  height: 340px;
 }
 
 .chart-sub h4 {

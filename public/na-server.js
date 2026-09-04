@@ -95,8 +95,52 @@ function loadDistribution(range) {
           data.counts,
         );
       }
+      renderSkillTierPercentages(data.counts);
     })
     .catch((err) => console.error("Error loading winrate distribution:", err));
+}
+
+// share of players falling into each skill tier (Terrible through Super Unicum), shown as
+// its own summary row. data.counts is a 101-bucket (0%-100%) winrate histogram, so buckets
+// are rolled up into tiers using the same thresholds winrateTierLabel/Color use elsewhere.
+function renderSkillTierPercentages(counts) {
+  const total = counts.reduce((a, b) => a + b, 0);
+  const tiers = [];
+  counts.forEach((count, pct) => {
+    const label = winrateTierLabel(pct);
+    let tier = tiers.find((t) => t.label === label);
+    if (!tier) {
+      tier = { label, color: winrateTierColor(pct), count: 0 };
+      tiers.push(tier);
+    }
+    tier.count += count;
+  });
+
+  document.getElementById("dash-bucket-percentages").innerHTML = tiers
+    .map(({ label, color, count }) => {
+      const pct = total > 0 ? (count / total) * 100 : 0;
+      return `
+        <div class="clan-item">
+          <div class="clan-item-label">${label}</div>
+          <div class="clan-item-value" style="color: ${color}">${pct.toFixed(1)}%</div>
+        </div>`;
+    })
+    .join("");
+}
+
+// a few points below the lowest bucket's winrate and above the highest, rather than 0 and
+// an auto-scaled max, so the bar-height differences between buckets (usually just a few
+// points apart) are actually visible
+function winrateByBattlesYMin(winratePcts) {
+  const valid = winratePcts.filter((pct) => pct != null);
+  if (valid.length === 0) return undefined;
+  return Math.max(0, Math.floor(Math.min(...valid) - 2));
+}
+
+function winrateByBattlesYMax(winratePcts) {
+  const valid = winratePcts.filter((pct) => pct != null);
+  if (valid.length === 0) return undefined;
+  return Math.ceil(Math.max(...valid) + 2);
 }
 
 function makeWinrateByBattlesChart(id, labels, avgWinrates, counts) {
@@ -104,33 +148,27 @@ function makeWinrateByBattlesChart(id, labels, avgWinrates, counts) {
   const colors = winratePcts.map((pct) => (pct != null ? winrateTierColor(pct) : "#3a4a5c"));
 
   return new Chart(document.getElementById(id), {
-    type: "line",
+    type: "bar",
     data: {
       labels,
       datasets: [
         {
           data: winratePcts,
-          borderColor: "#3498db",
-          backgroundColor: "rgba(52, 152, 219, 0.15)",
-          pointBackgroundColor: colors,
-          pointBorderColor: colors,
-          pointRadius: 5,
-          pointHoverRadius: 7,
-          borderWidth: 2,
-          fill: true,
-          tension: 0.3,
-          spanGaps: true,
+          backgroundColor: colors,
+          borderWidth: 0,
+          counts,
         },
       ],
     },
     options: {
+      maintainAspectRatio: false,
       plugins: {
         legend: { display: false },
         tooltip: {
           callbacks: {
             label: (ctx) => {
               if (ctx.parsed.y == null) return "No data";
-              const count = counts[ctx.dataIndex];
+              const count = ctx.dataset.counts[ctx.dataIndex];
               return `${ctx.parsed.y.toFixed(2)}% winrate — ${count.toLocaleString()} players`;
             },
           },
@@ -142,6 +180,8 @@ function makeWinrateByBattlesChart(id, labels, avgWinrates, counts) {
           grid: { color: "#1e3448" },
         },
         y: {
+          min: winrateByBattlesYMin(winratePcts),
+          max: winrateByBattlesYMax(winratePcts),
           ticks: { color: "#e0e6ed", callback: (value) => `${value}%` },
           grid: { color: "#1e3448" },
         },
@@ -156,10 +196,16 @@ function loadWinrateByBattles(range) {
   fetch(`/api/na-server/winrate-by-battles?range=${range}`)
     .then((response) => response.json())
     .then((data) => {
+      const winratePcts = data.avgWinrates.map((wr) => (wr != null ? wr * 100 : null));
       if (winrateByBattlesChart) {
-        winrateByBattlesChart.data.datasets[0].data = data.avgWinrates.map((wr) =>
-          wr != null ? wr * 100 : null,
+        const dataset = winrateByBattlesChart.data.datasets[0];
+        dataset.data = winratePcts;
+        dataset.backgroundColor = winratePcts.map((pct) =>
+          pct != null ? winrateTierColor(pct) : "#3a4a5c",
         );
+        dataset.counts = data.counts;
+        winrateByBattlesChart.options.scales.y.min = winrateByBattlesYMin(winratePcts);
+        winrateByBattlesChart.options.scales.y.max = winrateByBattlesYMax(winratePcts);
         winrateByBattlesChart.update();
       } else {
         winrateByBattlesChart = makeWinrateByBattlesChart(
@@ -169,8 +215,24 @@ function loadWinrateByBattles(range) {
           data.counts,
         );
       }
+      renderBattlesBucketPercentages(data.labels, data.counts);
     })
     .catch((err) => console.error("Error loading winrate by battles played:", err));
+}
+
+// share of players falling into each battles-played bucket, shown as its own summary row
+function renderBattlesBucketPercentages(labels, counts) {
+  const total = counts.reduce((a, b) => a + b, 0);
+  document.getElementById("dash-battles-bucket-percentages").innerHTML = labels
+    .map((label, i) => {
+      const pct = total > 0 ? (counts[i] / total) * 100 : 0;
+      return `
+        <div class="clan-item">
+          <div class="clan-item-label">${label} Battles</div>
+          <div class="clan-item-value">${pct.toFixed(1)}%</div>
+        </div>`;
+    })
+    .join("");
 }
 
 function loadSummary(range) {
