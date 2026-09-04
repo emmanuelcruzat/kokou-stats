@@ -1,7 +1,16 @@
 require("dotenv").config();
 const express = require("express");
 const axios = require("axios");
-const { pool, recordWinrate, recordStatSnapshot, getStatWindows, getStatHistory } = require("./db");
+const {
+  pool,
+  recordWinrate,
+  recordStatSnapshot,
+  getStatWindows,
+  getStatHistory,
+  recordShipStatSnapshot,
+  getShipStatWindows,
+  getShipStatHistory,
+} = require("./db");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -41,6 +50,12 @@ const BATTLE_TYPE_FIELDS = {
   rank: "rank_solo",
   coop: "pve",
 };
+
+// the reverse of BATTLE_TYPE_FIELDS: which mode a ships-endpoint `extra` stats field
+// belongs to, for tagging per-ship snapshots
+const FIELD_TO_BATTLE_TYPE = Object.fromEntries(
+  Object.entries(BATTLE_TYPE_FIELDS).map(([mode, field]) => [field, mode]),
+);
 
 // resolves a validated battle-type mode from a query param, defaulting to "pvp"
 function resolveMode(rawMode) {
@@ -279,6 +294,39 @@ app.get("/api/player/:username/stat-history", async (req, res) => {
   }
 });
 
+// per-ship baseline totals for each supported window (24h/7d/30d/90d/365d), for a given
+// battle-type mode (?mode=, defaulting to "pvp"). The client diffs these against its
+// already-loaded live per-ship stats to compute an exact windowed PR.
+app.get("/api/player/:username/ship-windows", async (req, res) => {
+  try {
+    const username = req.params.username;
+    const mode = resolveMode(req.query.mode);
+    const accountId = await getAccountId(username);
+    const windows = await getShipStatWindows(accountId, mode);
+    res.json({ windows });
+  } catch (err) {
+    console.error("Error fetching windowed ship stats:", err.message);
+    console.error("Stack:", err.stack);
+    res.status(500).json({ error: "Failed to fetch windowed ship stats" });
+  }
+});
+
+// full per-snapshot history of a player's per-ship totals for a given battle-type mode
+// (?mode=, defaulting to "pvp"), for the player page's PR-over-time chart
+app.get("/api/player/:username/ship-stat-history", async (req, res) => {
+  try {
+    const username = req.params.username;
+    const mode = resolveMode(req.query.mode);
+    const accountId = await getAccountId(username);
+    const history = await getShipStatHistory(accountId, mode);
+    res.json({ history });
+  } catch (err) {
+    console.error("Error fetching ship stat history:", err.message);
+    console.error("Stack:", err.stack);
+    res.status(500).json({ error: "Failed to fetch ship stat history" });
+  }
+});
+
 app.get("/api/player/:username/ships", async (req, res) => {
   try {
     const username = req.params.username;
@@ -304,6 +352,15 @@ app.get("/api/player/:username/ships", async (req, res) => {
     if (!ships) {
       return res.status(403).json({ error: "Player statistics are hidden" });
     }
+
+    const shipsStatsField = allowedExtras.includes(req.query.extra) ? req.query.extra : "pvp";
+    const shipsBattleType = FIELD_TO_BATTLE_TYPE[shipsStatsField] ?? "pvp";
+    try {
+      await recordShipStatSnapshot(accountId, username, shipsBattleType, ships, shipsStatsField);
+    } catch (err) {
+      console.error("Error recording ship stat snapshot:", err.message);
+    }
+
     const shipIds = ships.map((s) => s.ship_id);
 
     // encyclopedia API accepts at most 100 ship IDs per request

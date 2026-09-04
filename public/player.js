@@ -43,6 +43,11 @@ const windowsCache = {};
 const windowsPromiseCache = {};
 const nextSnapshotAtByMode = {};
 
+// per-ship baseline totals for each window, used to compute exact windowed PR (see
+// rangeRowStats) — tracked the same way as windowsCache above
+const shipWindowsCache = {};
+const shipWindowsPromiseCache = {};
+
 const rangeOrder = ["all", "24h", "7d", "30d", "90d", "365d"];
 const rangeTableLabels = {
   all: "Overall",
@@ -70,6 +75,23 @@ function fetchWindows(mode) {
       });
   }
   return windowsPromiseCache[mode];
+}
+
+function fetchShipWindows(mode) {
+  if (!shipWindowsPromiseCache[mode]) {
+    shipWindowsPromiseCache[mode] = fetch(`/api/player/${username}/ship-windows?mode=${mode}`)
+      .then((r) => r.json())
+      .then((data) => {
+        shipWindowsCache[mode] = data;
+        return data;
+      })
+      .catch((err) => {
+        console.error(`Error loading windowed ship stats for ${mode}:`, err);
+        shipWindowsCache[mode] = { windows: {} };
+        return shipWindowsCache[mode];
+      });
+  }
+  return shipWindowsPromiseCache[mode];
 }
 
 // standard normal CDF (Abramowitz & Stegun 7.1.26 approximation, ~7 decimal places accurate)
@@ -125,15 +147,24 @@ function rangeRowStats(key) {
   if (!w.available) return { available: false, unlocksAt: w.unlocksAt, reason: w.reason };
 
   const winRate = w.battles > 0 ? (w.wins / w.battles) * 100 : 0;
-  // PR needs per-ship expected-value data we don't snapshot, so it's only ever
-  // available for the lifetime "Overall" row, not windowed ranges
+  // windowed PR: diff this mode's live per-ship totals against the per-ship baseline
+  // snapshot for this window, then run the actual-vs-expected formula on the deltas
+  const shipWindow = shipWindowsCache[currentMode]?.windows?.[key];
+  const liveShips = modeCache[currentMode]?.ships;
+  const pr =
+    w.battles > 0 && shipWindow?.available && liveShips && expectedData
+      ? calculatePRFromShipTotals(
+          diffShipTotals(liveShips, battleModeConfig[currentMode].statsField, shipWindow.ships),
+          expectedData,
+        )
+      : null;
   const kei = w.battles > 0 ? w.damage_scouting / w.battles / 1000 + winRate : null;
   const overall = modeCache[currentMode]?.pvp;
   const significance =
     w.battles > 0 && overall
       ? winrateSignificance(w.battles, w.wins, overall.battles, overall.wins)
       : null;
-  return { available: true, pvp: w, winRate, pr: null, kei, approximate: w.approximate, significance };
+  return { available: true, pvp: w, winRate, pr, kei, approximate: w.approximate, significance };
 }
 
 // (re)builds the Range table for the current mode
@@ -231,14 +262,15 @@ function renderRangeTable() {
   `;
 }
 
-// Charts card: winrate/avg. damage/KEI-over-time (from recorded snapshots), plus a
-// PR chart that can only ever show a single "today" point — see renderPRChart
+// Charts card: winrate/avg. damage/KEI/PR-over-time, from recorded snapshots
 let winrateHistoryChart = null;
 let damageHistoryChart = null;
 let keiHistoryChart = null;
 let prHistoryChart = null;
 const historyCache = {};
 const historyPromiseCache = {};
+const shipHistoryCache = {};
+const shipHistoryPromiseCache = {};
 
 function fetchStatHistory(mode) {
   if (!historyPromiseCache[mode]) {
@@ -255,6 +287,23 @@ function fetchStatHistory(mode) {
       });
   }
   return historyPromiseCache[mode];
+}
+
+function fetchShipStatHistory(mode) {
+  if (!shipHistoryPromiseCache[mode]) {
+    shipHistoryPromiseCache[mode] = fetch(`/api/player/${username}/ship-stat-history?mode=${mode}`)
+      .then((r) => r.json())
+      .then((data) => {
+        shipHistoryCache[mode] = data.history ?? [];
+        return shipHistoryCache[mode];
+      })
+      .catch((err) => {
+        console.error(`Error loading ship stat history for ${mode}:`, err);
+        shipHistoryCache[mode] = [];
+        return shipHistoryCache[mode];
+      });
+  }
+  return shipHistoryPromiseCache[mode];
 }
 
 // creates a line chart the first time, or updates its data on subsequent calls
@@ -369,16 +418,14 @@ function renderChartsCard(history) {
   );
 }
 
-// PR can't be reconstructed historically — it depends on per-ship expected-value
-// comparisons, and player_stat_history only stores whole-account totals, not a
-// per-ship breakdown at each snapshot. So this chart only ever plots today's live
-// PR as a single point; it won't grow richer over time the way the others do unless
-// per-ship history gets tracked too.
+// PR-over-time, computed from the per-ship snapshot history (player_ship_stat_history)
+// against today's expected values — same data source and cadence as the winrate/damage/KEI
+// charts, just run through the actual-vs-expected formula per snapshot
 function renderPRChart() {
   const canvas = document.getElementById("chart-pr-history");
-  const pr = modeCache[currentMode]?.pr;
+  const history = shipHistoryCache[currentMode];
 
-  if (pr == null) {
+  if (!expectedData || !history || history.length === 0) {
     canvas.style.display = "none";
     let placeholder = document.getElementById("pr-history-placeholder");
     if (!placeholder) {
@@ -387,18 +434,23 @@ function renderPRChart() {
       placeholder.className = "range-note";
       canvas.insertAdjacentElement("afterend", placeholder);
     }
-    placeholder.textContent = "PR isn't available for this player.";
+    placeholder.textContent = expectedData
+      ? "Not tracked yet — check back after this player has been looked up again."
+      : "PR isn't available for this player.";
     return;
   }
 
   document.getElementById("pr-history-placeholder")?.remove();
   canvas.style.display = "";
 
+  const labels = history.map((h) => new Date(h.recordedAt).toLocaleDateString());
+  const values = history.map((h) => calculatePRFromShipTotals(h.ships, expectedData));
+
   prHistoryChart = renderLineChart(
     prHistoryChart,
     canvas,
-    [new Date().toLocaleDateString()],
-    [pr],
+    labels,
+    values,
     {
       label: "PR",
       color: "#c9a84c",
@@ -524,8 +576,14 @@ function loadRangeAndCharts(mode) {
   fetchWindows(mode).then(() => {
     if (currentMode === mode) renderRangeTable();
   });
+  fetchShipWindows(mode).then(() => {
+    if (currentMode === mode) renderRangeTable();
+  });
   fetchStatHistory(mode).then((history) => {
     if (currentMode === mode) renderChartsCard(history);
+  });
+  fetchShipStatHistory(mode).then(() => {
+    if (currentMode === mode) renderPRChart();
   });
 }
 
@@ -773,7 +831,11 @@ function prColor(pr) {
                 : "#e74c3c";
 }
 
-function calculatePR(ships, expectedData, pvpKey = "pvp") {
+// the WoWS Numbers PR formula, given per-ship actual totals ({shipId, battles, wins,
+// damageDealt, frags}) for some slice of a player's play — their whole career, a past
+// snapshot, or a windowed delta between two snapshots — compared against today's
+// per-ship expected values
+function calculatePRFromShipTotals(shipTotals, expectedData) {
   let actualDmg = 0,
     actualFrags = 0,
     actualWins = 0;
@@ -781,18 +843,22 @@ function calculatePR(ships, expectedData, pvpKey = "pvp") {
     expectedFrags = 0,
     expectedWins = 0;
 
-  ships.forEach((ship) => {
-    const pvp = ship[pvpKey];
-    if (!pvp || pvp.battles === 0) return;
-    const exp = expectedData[ship.ship_id];
-    if (!exp) return;
+  shipTotals.forEach(({ shipId, battles, wins, damageDealt, frags }) => {
+    if (!battles) return;
+    const exp = expectedData[shipId];
+    // wows-numbers returns [] (not an object) for ships it doesn't have enough samples
+    // for yet — treat that the same as no expected data for this ship
+    if (!exp || Array.isArray(exp)) return;
 
-    actualDmg += pvp.damage_dealt;
-    actualFrags += pvp.frags;
-    actualWins += pvp.wins;
-    expectedDmg += exp.average_damage_dealt * pvp.battles;
-    expectedFrags += exp.average_frags * pvp.battles;
-    expectedWins += (exp.win_rate / 100) * pvp.battles;
+    // Number(...) guards against damageDealt arriving as a numeric string (e.g. Postgres
+    // BIGINT columns come back as strings), where += would silently concatenate instead
+    // of add
+    actualDmg += Number(damageDealt);
+    actualFrags += Number(frags);
+    actualWins += Number(wins);
+    expectedDmg += exp.average_damage_dealt * battles;
+    expectedFrags += exp.average_frags * battles;
+    expectedWins += (exp.win_rate / 100) * battles;
   });
 
   if (expectedDmg === 0) return null;
@@ -806,6 +872,45 @@ function calculatePR(ships, expectedData, pvpKey = "pvp") {
   const nWins = Math.max(0, (rWins - 0.7) / 0.3);
 
   return Math.round(700 * nDmg + 300 * nFrags + 150 * nWins);
+}
+
+// reshapes a live ships response (as returned by /api/player/:username/ships, keyed by
+// ship_id/damage_dealt snake_case) into the {shipId, battles, wins, damageDealt, frags}
+// shape calculatePRFromShipTotals expects
+function normalizeShipTotals(ships, pvpKey = "pvp") {
+  return ships.map((ship) => {
+    const pvp = ship[pvpKey];
+    return {
+      shipId: ship.ship_id,
+      battles: pvp?.battles ?? 0,
+      wins: pvp?.wins ?? 0,
+      damageDealt: pvp?.damage_dealt ?? 0,
+      frags: pvp?.frags ?? 0,
+    };
+  });
+}
+
+// diffs live per-ship totals against a baseline snapshot's per-ship totals (keyed by
+// ship_id, as returned by /api/player/:username/ship-windows), for windowed PR. Ships not
+// present in the baseline (bought/first played within the window) diff against zero.
+// Negative deltas (a ship's counters look like they went backwards — stats reset, snapshot
+// skew) are clamped to zero rather than allowed to pollute the total.
+function diffShipTotals(ships, pvpKey, baselineShips) {
+  return ships.map((ship) => {
+    const pvp = ship[pvpKey];
+    const baseline = baselineShips?.[ship.ship_id];
+    return {
+      shipId: ship.ship_id,
+      battles: Math.max(0, (pvp?.battles ?? 0) - (baseline?.battles ?? 0)),
+      wins: Math.max(0, (pvp?.wins ?? 0) - (baseline?.wins ?? 0)),
+      damageDealt: Math.max(0, (pvp?.damage_dealt ?? 0) - (baseline?.damageDealt ?? 0)),
+      frags: Math.max(0, (pvp?.frags ?? 0) - (baseline?.frags ?? 0)),
+    };
+  });
+}
+
+function calculatePR(ships, expectedData, pvpKey = "pvp") {
+  return calculatePRFromShipTotals(normalizeShipTotals(ships, pvpKey), expectedData);
 }
 
 function renderShipsTable(ships, sortCol, sortAsc, pvpKey = "pvp") {
@@ -1161,12 +1266,18 @@ fetch(`/api/player/${username}/ships`)
         if (modeCache.pvp) {
           modeCache.pvp.pr = expectedData ? calculatePR(ships, expectedData, "pvp") : null;
         }
+        // backfill PR for any other modes the player switched to before this resolved —
+        // loadMode() computes it inline, but only using whatever expectedData was in hand
+        // at the time
+        Object.entries(modeCache).forEach(([mode, entry]) => {
+          if (mode === "pvp" || !entry.ships) return;
+          const statsField = battleModeConfig[mode].statsField;
+          entry.pr = expectedData ? calculatePR(entry.ships, expectedData, statsField) : null;
+        });
         initialPrReady = true;
         tryRenderPlayerDetails();
-        if (currentMode === "pvp") {
-          renderPRChart();
-          renderRangeTable();
-        }
+        renderPRChart();
+        renderRangeTable();
       });
   })
   .catch((error) => {
