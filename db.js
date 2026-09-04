@@ -352,6 +352,71 @@ async function getStatWindows(accountId, battleType, current) {
   return { trackingSince, nextSnapshotAt, windows };
 }
 
+// clan_crawl_state is a single row tracking the background clan crawler's progress: which
+// clan_id it'll check next, and a running hit/miss tally for visibility (see
+// getCrawlStatus). clan_id 1000065000 is where the crawler starts: real clan_ids on NA
+// were confirmed by probing to cluster starting around 1000070000, with everything below
+// ~1e9 empty — starting the sweep at 1 (or even at 1e9 flat) would spend a very long time
+// walking dead space before reaching any real clan. Real territory still has long empty
+// stretches between clusters, so this is a plain forward sweep with no "wrap on a miss
+// streak" logic — that heuristic doesn't fit this ID space, and a forward-only sweep is
+// actually the right long-term shape anyway, since newer clans get ever-higher ids.
+pool
+  .query(
+    `CREATE TABLE IF NOT EXISTS clan_crawl_state (
+       id                  INTEGER PRIMARY KEY DEFAULT 1,
+       next_clan_id        BIGINT NOT NULL DEFAULT 1000065000,
+       consecutive_misses  INTEGER NOT NULL DEFAULT 0,
+       total_checked       BIGINT NOT NULL DEFAULT 0,
+       total_hits          BIGINT NOT NULL DEFAULT 0,
+       updated_at          TIMESTAMP NOT NULL DEFAULT now()
+     );
+     INSERT INTO clan_crawl_state (id, next_clan_id)
+       VALUES (1, 1000065000)
+       ON CONFLICT (id) DO NOTHING;`,
+  )
+  .catch((err) =>
+    console.error("Error ensuring clan_crawl_state table:", err.message),
+  );
+
+async function getCrawlState() {
+  const result = await pool.query(
+    `SELECT next_clan_id, consecutive_misses, total_checked, total_hits FROM clan_crawl_state WHERE id = 1`,
+  );
+  return result.rows[0];
+}
+
+// records the outcome of checking one clan_id and advances the cursor to the next one.
+// consecutive_misses is tracked purely for visibility (see getCrawlStatus) — it no longer
+// drives any wrap-around behavior
+async function recordCrawlResult(checkedClanId, hit) {
+  const state = await getCrawlState();
+  const consecutiveMisses = hit ? 0 : state.consecutive_misses + 1;
+  const nextClanId = checkedClanId + 1;
+
+  await pool.query(
+    `UPDATE clan_crawl_state
+     SET next_clan_id = $1, consecutive_misses = $2, total_checked = total_checked + 1,
+         total_hits = total_hits + $3, updated_at = now()
+     WHERE id = 1`,
+    [nextClanId, consecutiveMisses, hit ? 1 : 0],
+  );
+
+  return { nextClanId };
+}
+
+async function getCrawlStatus() {
+  const state = await getCrawlState();
+  const hitRate = state.total_checked > 0 ? state.total_hits / state.total_checked : null;
+  return {
+    nextClanId: Number(state.next_clan_id),
+    consecutiveMisses: state.consecutive_misses,
+    totalChecked: Number(state.total_checked),
+    totalHits: Number(state.total_hits),
+    hitRate,
+  };
+}
+
 module.exports = {
   pool,
   recordWinrate,
@@ -361,4 +426,6 @@ module.exports = {
   recordShipStatSnapshot,
   getShipStatWindows,
   getShipStatHistory,
+  recordCrawlResult,
+  getCrawlStatus,
 };
