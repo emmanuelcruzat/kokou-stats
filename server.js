@@ -551,6 +551,35 @@ app.get("/api/na-server/winrate-distribution", async (req, res) => {
   }
 });
 
+// where a given winrate ranks against the recorded player_winrates sample — used for the
+// "Top X%" tag on player pages. topPercent is the share of tracked players with a strictly
+// higher winrate, so a small number means a strong player
+app.get("/api/na-server/percentile", async (req, res) => {
+  try {
+    const winrate = parseFloat(req.query.winrate);
+    if (Number.isNaN(winrate)) {
+      return res.status(400).json({ error: "winrate query param must be a number" });
+    }
+
+    const result = await pool.query(
+      `SELECT count(*) AS total, count(*) FILTER (WHERE winrate > $1) AS above
+       FROM player_winrates`,
+      [winrate],
+    );
+    const row = result.rows[0];
+    const total = parseInt(row.total, 10);
+    const above = parseInt(row.above, 10);
+
+    res.json({
+      total,
+      topPercent: total > 0 ? (above / total) * 100 : null,
+    });
+  } catch (err) {
+    console.error("Error computing winrate percentile:", err.message);
+    res.status(500).json({ error: "Failed to compute winrate percentile" });
+  }
+});
+
 //get expected values for a player from WoWS Numbers API
 app.get("/api/expected", async (req, res) => {
   try {
