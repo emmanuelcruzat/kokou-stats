@@ -17,7 +17,6 @@ function hideStatsUpdateModal() {
 
 let resolvedClanTag = null;
 let resolvedClanId = null;
-let clanPayload = null;
 
 function applyClanTag(tag, id) {
   resolvedClanTag = tag;
@@ -377,6 +376,14 @@ function formatChartDate(date) {
   return `${month}.${day}`;
 }
 
+// MM.DD.YYYY, HH:MM AM/PM, for the player header's Last Battle date
+function formatMMDDYYYY(date) {
+  const d = new Date(date);
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${month}.${day}.${d.getFullYear()}, ${d.toLocaleTimeString()}`;
+}
+
 // creates a line chart the first time, or updates its data on subsequent calls
 function renderLineChart(existingChart, canvas, labels, values, opts) {
   if (existingChart) {
@@ -602,8 +609,7 @@ function tryRenderPlayerDetails() {
       <div id="captain-title" class="captain-title">${captainTitle}</div>
       ${developerTag}${skillTag}${hipperTag}
       <div class="player-meta">
-        <span>Last Battle: ${new Date(accountData.last_battle_time * 1000).toLocaleString()}</span>
-        <span>Updated: ${new Date(accountData.stats_updated_at * 1000).toLocaleString()}</span>
+        <span>Last Battle: ${formatMMDDYYYY(accountData.last_battle_time * 1000)}</span>
       </div>
     </div>
   `;
@@ -629,24 +635,6 @@ async function loadMode(mode) {
   const entry = { pvp, winRate, currentWrColor, pr, ships: modeShips };
   modeCache[mode] = entry;
   return entry;
-}
-
-function tryClanRender() {
-  const clanCard = document.getElementById("clan-card");
-  if (!clanCard || !clanPayload) return;
-  const { clan, details, role, joined_at } = clanPayload;
-  clanCard.style.display = "";
-  clanCard.innerHTML = `
-    <h3>Clan</h3>
-    <div class="clan-row">
-      ${clanItem("Name", `<a href="/clan/${clanPayload.clan_id}" class="clan-leader-link">[${clan.tag}] ${clan.name}</a>`)}
-      ${clanItem("Role", roleLabel[role] ?? role)}
-      ${clanItem("Joined", new Date(joined_at * 1000).toLocaleDateString())}
-      <div class="clan-divider"></div>
-      ${clanItem("Leader", `<a href="/player/${details.leader_name}" class="clan-leader-link">${details.leader_name}</a>`)}
-      ${clanItem("Members", clan.members_count)}
-    </div>
-  `;
 }
 
 // range table + Charts card: shown for every battle-type mode, each tracked
@@ -742,7 +730,6 @@ fetch(`/api/player/${username}`)
 
     modeCache.pvp = { pvp, winRate, currentWrColor, pr: null };
     tryRenderPlayerDetails();
-    tryClanRender();
     hideStatsUpdateModal();
 
     // eagerly load the range table + Charts card since pvp is the default mode
@@ -1406,29 +1393,14 @@ fetch(`/api/player/${username}/ships`)
       `<p>Error fetching ship stats. Please try again later.</p>`;
   });
 
-const roleLabel = {
-  commander: "Commander",
-  executive_officer: "Executive Officer",
-  recruitment_officer: "Recruitment Officer",
-  officer: "Officer",
-  private: "Recruit",
-};
-
+// only the clan tag next to the player's name is shown on this page — see /clan/:clanId
+// for full clan details
 fetch(`/api/player/${username}/clan`)
   .then((r) => r.json())
-  .then(async (clanAccountRes) => {
+  .then((clanAccountRes) => {
     const accountId = Object.keys(clanAccountRes.data)[0];
     const membership = clanAccountRes.data[accountId];
     if (!membership) return;
-
-    const { clan_id, joined_at, role, clan } = membership;
-
-    const clanRes = await fetch(`/api/clan/${clan_id}`);
-    const clanData = await clanRes.json();
-    const details = clanData.data[clan_id];
-
-    applyClanTag(clan.tag, clan_id);
-    clanPayload = { clan, clan_id, details, role, joined_at };
-    tryClanRender();
+    applyClanTag(membership.clan.tag, membership.clan_id);
   })
   .catch((err) => console.error("Error fetching clan data:", err));

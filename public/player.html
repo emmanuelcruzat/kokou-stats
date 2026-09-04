@@ -38,30 +38,22 @@
         </form>
         <ul>
           <li><a href="/">Home</a></li>
-          <li><a href="/na-server">NA Server Stats</a></li>
-          <li><a href="/about">About</a></li>
-          <li>
-            <a
-              href="https://emmanuelcruzat.github.io/portfolio-dva/"
-              target="_blank"
-              >Contact</a
-            >
-          </li>
-        </ul>
+          <li><a href="/na-server">NA Summary</a></li>
+          <li><a href="/about">About</a></li>        </ul>
         <button id="theme-toggle" class="theme-toggle" type="button"></button>
       </nav>
     </header>
 
-    <main>
-      <div class="header-row">
+    <main id="player-main">
+      <div class="sections-stack">
+      <section class="header-row page-section">
         <div id="player-header-container">
           <div class="loading">
             <div class="spinner"></div>
             <p>Loading player...</p>
           </div>
         </div>
-        <div id="clan-card" class="stat-card" style="display: none"></div>
-      </div>
+      </section>
 
       <section id="stats-container" class="page-section">
         <div class="section-header-row">
@@ -97,7 +89,7 @@
         <p>Unable to load player statistics. Please try again later.</p>
       </section>
 
-      <section class="page-section">
+      <section class="page-section section-charts">
         <h2 class="section-title">Charts &amp; Graphs</h2>
         <div id="charts-card">
           <div class="charts-grid">
@@ -152,6 +144,7 @@
           <p>Loading ship statistics...</p>
         </div>
       </section>
+      </div>
     </main>
 
     <div id="stats-update-modal" class="modal-overlay">
