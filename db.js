@@ -75,6 +75,26 @@ async function recordWinrate(username, winrate, battles) {
   );
 }
 
+// escapes ILIKE wildcard characters in user-supplied search input so a literal "%" or "_"
+// in a username query doesn't act as a wildcard
+function escapeLike(str) {
+  return str.replace(/[\\%_]/g, (ch) => `\\${ch}`);
+}
+
+// username-prefix suggestions for the search box, drawn from player_winrates (the
+// deduplicated set of every player we've ever recorded), ranked by battle count so more
+// established/known players surface first among matches
+async function searchPlayers(prefix, limit = 8) {
+  const result = await pool.query(
+    `SELECT username, battles FROM player_winrates
+     WHERE username ILIKE $1 ESCAPE '\\'
+     ORDER BY battles DESC
+     LIMIT $2`,
+    [`${escapeLike(prefix)}%`, limit],
+  );
+  return result.rows.map((row) => ({ username: row.username, battles: row.battles }));
+}
+
 // minimum time between recorded snapshots for a given player, so the winrate-over-time
 // history doesn't grow on every single lookup, and so windowed stats don't lose accuracy
 // to lots of near-duplicate rows
@@ -420,6 +440,7 @@ async function getCrawlStatus() {
 module.exports = {
   pool,
   recordWinrate,
+  searchPlayers,
   recordStatSnapshot,
   getStatWindows,
   getStatHistory,
