@@ -4,67 +4,7 @@ const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
 });
 
-// player_stat_history is append-only: every lookup adds a new row so we can
-// diff a player's lifetime totals against an older snapshot to get windowed
-// (24h/7d/30d/90d/365d) stats. battle_type ("pvp"/"solo"/"div2"/"div3"/"rank"/"coop")
-// tags which battle-type tab the snapshot came from, since each is tracked separately.
-// Created/migrated here (rather than requiring a manual migration like player_winrates)
-// since it's new and additive.
-pool
-  .query(
-    `CREATE TABLE IF NOT EXISTS player_stat_history (
-       id                SERIAL PRIMARY KEY,
-       account_id        BIGINT NOT NULL,
-       username          TEXT NOT NULL,
-       battles           INTEGER NOT NULL,
-       wins              INTEGER NOT NULL,
-       losses            INTEGER NOT NULL,
-       draws             INTEGER NOT NULL,
-       survived_battles  INTEGER NOT NULL,
-       damage_dealt      BIGINT NOT NULL,
-       damage_scouting   BIGINT NOT NULL,
-       frags             INTEGER NOT NULL,
-       xp                BIGINT NOT NULL,
-       recorded_at       TIMESTAMP NOT NULL DEFAULT now()
-     );
-     ALTER TABLE player_stat_history
-       ADD COLUMN IF NOT EXISTS battle_type TEXT NOT NULL DEFAULT 'pvp';
-     DROP INDEX IF EXISTS player_stat_history_account_time_idx;
-     CREATE INDEX IF NOT EXISTS player_stat_history_account_type_time_idx
-       ON player_stat_history (account_id, battle_type, recorded_at);`,
-  )
-  .catch((err) =>
-    console.error("Error ensuring player_stat_history table:", err.message),
-  );
-
-// player_ship_stat_history mirrors player_stat_history but per-ship, so PR (which needs a
-// per-ship actual-vs-expected comparison, not just whole-account totals) can be windowed
-// and charted the same way winrate/damage/KEI are. Populated whenever ship stats are
-// fetched (see recordShipStatSnapshot), gated by the same SNAPSHOT_INTERVAL_MS below —
-// every row inserted in one snapshot batch shares the same recorded_at, so a batch can be
-// looked back up by (account_id, battle_type, recorded_at).
-pool
-  .query(
-    `CREATE TABLE IF NOT EXISTS player_ship_stat_history (
-       id                SERIAL PRIMARY KEY,
-       account_id        BIGINT NOT NULL,
-       username          TEXT NOT NULL,
-       battle_type       TEXT NOT NULL,
-       ship_id           BIGINT NOT NULL,
-       battles           INTEGER NOT NULL,
-       wins              INTEGER NOT NULL,
-       damage_dealt      BIGINT NOT NULL,
-       frags             INTEGER NOT NULL,
-       recorded_at       TIMESTAMP NOT NULL DEFAULT now()
-     );
-     CREATE INDEX IF NOT EXISTS player_ship_stat_history_account_type_time_idx
-       ON player_ship_stat_history (account_id, battle_type, recorded_at);`,
-  )
-  .catch((err) =>
-    console.error("Error ensuring player_ship_stat_history table:", err.message),
-  );
-
-// records or refreshes a player's overall winrate (used by the NA Server Stats sample)
+// records or refreshes a player's overall winrate
 async function recordWinrate(username, winrate, battles) {
   await pool.query(
     `INSERT INTO player_winrates (username, winrate, battles, last_updated)

@@ -75,86 +75,37 @@ function makeDistributionChart(id, labels, counts) {
   });
 }
 
-let distributionChart = null;
+fetch("/api/na-server/winrate-distribution")
+  .then((response) => response.json())
+  .then((data) => {
+    makeDistributionChart("chart-winrate-distribution", data.labels, data.counts);
+  })
+  .catch((err) => console.error("Error loading winrate distribution:", err));
 
-function loadDistribution(range) {
-  fetch(`/api/na-server/winrate-distribution?range=${range}`)
-    .then((response) => response.json())
-    .then((data) => {
-      if (distributionChart) {
-        distributionChart.data.datasets[0].data = data.counts;
-        distributionChart.update();
-      } else {
-        distributionChart = makeDistributionChart(
-          "chart-winrate-distribution",
-          data.labels,
-          data.counts,
-        );
-      }
-    })
-    .catch((err) => console.error("Error loading winrate distribution:", err));
-}
+fetch("/api/na-server/summary")
+  .then((response) => response.json())
+  .then((data) => {
+    document.getElementById("dash-total-players").textContent =
+      data.totalPlayers.toLocaleString();
 
-function loadSummary(range) {
-  fetch(`/api/na-server/summary?range=${range}`)
-    .then((response) => response.json())
-    .then((data) => {
-      document.getElementById("dash-total-players").textContent =
-        data.totalPlayers.toLocaleString();
+    document.getElementById("dash-average-winrate").textContent =
+      `${(data.averageWinrate * 100).toFixed(2)}%`;
 
-      if (data.totalPlayers === 0) {
-        document.getElementById("dash-average-winrate").textContent = "--";
-        document.getElementById("dash-average-battles").textContent = "--";
+    document.getElementById("dash-average-battles").textContent =
+      Math.round(data.averageBattles).toLocaleString();
 
-        const tierEl = document.getElementById("dash-summary-tier");
-        tierEl.textContent = "no data yet";
-        tierEl.style.color = "";
+    const winratePct = data.averageWinrate * 100;
+    const tierColor = winrateTierColor(winratePct);
 
-        document.getElementById("dash-summary-winrate").textContent = "--";
-        document.getElementById("dash-summary-winrate").style.color = "";
-        document.getElementById("dash-summary-battles").textContent = "0";
-        return;
-      }
+    const tierEl = document.getElementById("dash-summary-tier");
+    tierEl.textContent = winrateTierLabel(winratePct);
+    tierEl.style.color = tierColor;
 
-      document.getElementById("dash-average-winrate").textContent =
-        `${(data.averageWinrate * 100).toFixed(2)}%`;
+    const winrateEl = document.getElementById("dash-summary-winrate");
+    winrateEl.textContent = `${winratePct.toFixed(2)}%`;
+    winrateEl.style.color = tierColor;
 
-      document.getElementById("dash-average-battles").textContent =
-        Math.round(data.averageBattles).toLocaleString();
-
-      const winratePct = data.averageWinrate * 100;
-      const tierColor = winrateTierColor(winratePct);
-
-      const tierEl = document.getElementById("dash-summary-tier");
-      tierEl.textContent = winrateTierLabel(winratePct);
-      tierEl.style.color = tierColor;
-
-      const winrateEl = document.getElementById("dash-summary-winrate");
-      winrateEl.textContent = `${winratePct.toFixed(2)}%`;
-      winrateEl.style.color = tierColor;
-
-      document.getElementById("dash-summary-battles").textContent =
-        Math.round(data.averageBattles).toLocaleString();
-    })
-    .catch((err) => console.error("Error loading NA server summary:", err));
-}
-
-function loadRange(range) {
-  loadSummary(range);
-  loadDistribution(range);
-}
-
-const rangeToggle = document.getElementById("range-toggle");
-rangeToggle.addEventListener("click", (e) => {
-  const btn = e.target.closest(".battle-type-btn[data-range]");
-  if (!btn) return;
-
-  rangeToggle
-    .querySelectorAll(".battle-type-btn")
-    .forEach((b) => b.classList.remove("active"));
-  btn.classList.add("active");
-
-  loadRange(btn.dataset.range);
-});
-
-loadRange("all");
+    document.getElementById("dash-summary-battles").textContent =
+      Math.round(data.averageBattles).toLocaleString();
+  })
+  .catch((err) => console.error("Error loading NA server summary:", err));
