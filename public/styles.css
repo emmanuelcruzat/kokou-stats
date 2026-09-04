@@ -380,6 +380,38 @@ tr.range-row.locked td {
   gap: 2.5rem;
 }
 
+.overall-hero {
+  padding-bottom: 1.5rem;
+  margin-bottom: 1.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.overall-hero-row {
+  flex-wrap: wrap;
+  gap: 3rem;
+  row-gap: 1.5rem;
+}
+
+.overall-hero-row .clan-item-label {
+  font-size: 0.85rem;
+}
+
+.overall-hero-row .clan-item-value {
+  font-size: 2.25rem;
+  font-weight: 700;
+}
+
+.hero-tier {
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.hero-next {
+  font-size: 0.8rem;
+  font-weight: 600;
+  margin-top: 0.2rem;
+}
+
 .clan-divider {
   width: 1px;
   background-color: var(--border);
@@ -415,6 +447,30 @@ tr.range-row.locked td {
   color: var(--accent);
   letter-spacing: 0.04em;
   margin-bottom: 0.5rem;
+}
+
+.skill-tag {
+  display: inline-block;
+  padding: 0.15rem 0.6rem;
+  margin-bottom: 0.75rem;
+  margin-right: 0.5rem;
+  border: 1px solid;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.developer-tag {
+  color: var(--accent-contrast);
+  background-color: var(--accent);
+  border-color: var(--accent);
+}
+
+.hipper-tag {
+  color: #e74c3c;
+  border-color: #e74c3c;
 }
 
 .player-meta {
@@ -849,6 +905,17 @@ thead th {
 thead th.sortable {
   cursor: pointer;
   user-select: none;
+}
+
+/* the Range table sits inside the Service Record card already, so its header doesn't
+   need the boxed/underlined look the standalone Ships table uses */
+.range-panel thead th {
+  background-color: transparent;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border);
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
 }
 
 thead th.sortable:hover {

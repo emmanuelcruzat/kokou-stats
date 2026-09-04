@@ -29,6 +29,14 @@ function applyClanTag(tag, id) {
 const clanItem = (label, value) =>
   `<div class="clan-item"><div class="clan-item-label">${label}</div><div class="clan-item-value">${value}</div></div>`;
 
+// account_id(s) belonging to KokouStats' own developer(s), shown with a Developer tag on
+// their player page
+const DEVELOPER_ACCOUNT_IDS = new Set(["1055557648"]);
+
+// account_id(s) that get a fixed personal badge on their player page, regardless of their
+// actual Admiral Hipper stats
+const HIPPER_ENTHUSIAST_ACCOUNT_IDS = new Set(["1055557648"]);
+
 let accountData = null;
 let accountId = null;
 let captainTitle = null;
@@ -167,15 +175,70 @@ function rangeRowStats(key) {
   return { available: true, pvp: w, winRate, pr, kei, approximate: w.approximate, significance };
 }
 
+// windowed ranges shown as table rows — "all" (Overall) gets its own hero card instead,
+// see renderOverallHero
+const windowedRangeOrder = rangeOrder.filter((key) => key !== "all");
+
+// (re)builds the Overall hero card for the current mode
+function renderOverallHero() {
+  const hero = document.getElementById("overall-hero");
+  const stats = rangeRowStats("all");
+
+  if (stats.loading) {
+    hero.innerHTML = `<div class="loading"><div class="spinner"></div><p>Loading overall stats...</p></div>`;
+    return;
+  }
+
+  // caption showing how far the value is from the next tier up, colored with that tier's
+  // color rather than the value's own current-tier color
+  const nextTierCaption = (value, cutoffs, suffix = "") => {
+    const next = nextTierGap(value, cutoffs);
+    return next
+      ? `<div class="hero-next" style="color:${next.color}">+${next.gap.toFixed(2)}${suffix} to ${next.label}</div>`
+      : "";
+  };
+
+  const { pvp, winRate, pr, kei } = stats;
+  const battles = pvp.battles;
+  const hasBattles = battles > 0;
+  const wr = hasBattles
+    ? `<span style="color:${wrColor(winRate)}">${winRate.toFixed(2)}%</span> <span class="hero-tier" style="color:${wrColor(winRate)}">${TIER_LABELS[wrColor(winRate)]}</span>${nextTierCaption(winRate, WR_TIER_CUTOFFS, "%")}`
+    : `<span class="placeholder">--</span>`;
+  const avgDmg = hasBattles
+    ? Math.round(pvp.damage_dealt / battles).toLocaleString()
+    : `<span class="placeholder">--</span>`;
+  const prValue =
+    pr != null
+      ? `<span style="color:${prColor(pr)}">${pr.toLocaleString()}</span> <span class="hero-tier" style="color:${prColor(pr)}">${TIER_LABELS[prColor(pr)]}</span>${nextTierCaption(pr, PR_TIER_CUTOFFS)}`
+      : `<span class="placeholder">--</span>`;
+  const keiValue =
+    kei != null
+      ? `<span style="color:${keiColor(kei)}">${kei.toFixed(2)}</span> <span class="hero-tier" style="color:${keiColor(kei)}">${TIER_LABELS[keiColor(kei)]}</span>${nextTierCaption(kei, KEI_TIER_CUTOFFS)}`
+      : `<span class="placeholder">--</span>`;
+
+  hero.innerHTML = `
+    <div class="clan-row overall-hero-row">
+      ${clanItem("Battles", battles.toLocaleString())}
+      ${clanItem("Win Rate", wr)}
+      ${clanItem("Avg. Damage", avgDmg)}
+      <div class="clan-divider"></div>
+      ${clanItem(`PR <a href="https://na.wows-numbers.com/personal/rating" target="_blank" class="info-link">?</a>`, prValue)}
+      ${clanItem(`KEI <a href="/kei" target="_blank" class="info-link">?</a>`, keiValue)}
+    </div>
+  `;
+}
+
 // (re)builds the Range table for the current mode
 function renderRangeTable() {
+  renderOverallHero();
+
   const container = document.getElementById("range-toggle");
   if (!modeCache[currentMode]) {
     container.innerHTML = `<div class="loading"><div class="spinner"></div><p>Loading ranges...</p></div>`;
     return;
   }
 
-  const rowStats = rangeOrder.map((key) => ({ key, stats: rangeRowStats(key) }));
+  const rowStats = windowedRangeOrder.map((key) => ({ key, stats: rangeRowStats(key) }));
 
   const rows = rowStats
     .map(({ key, stats }) => {
@@ -509,11 +572,27 @@ const battleModeConfig = {
 function tryRenderPlayerDetails() {
   if (!accountData || captainTitle === null || !initialPrReady) return;
 
+  const developerTag = DEVELOPER_ACCOUNT_IDS.has(String(accountId))
+    ? `<span class="skill-tag developer-tag">Developer</span>`
+    : "";
+  const hipperTag = HIPPER_ENTHUSIAST_ACCOUNT_IDS.has(String(accountId))
+    ? `<span class="skill-tag hipper-tag">Hipper Enthusiast</span>`
+    : "";
+
+  // skill tag is always based on overall Random Battles win rate, regardless of selected
+  // mode — same rule the captain title above it follows
+  const overallWinRate = modeCache.pvp?.winRate;
+  const skillTag =
+    overallWinRate != null
+      ? `<span class="skill-tag" style="color:${wrColor(overallWinRate)}; border-color:${wrColor(overallWinRate)}">${TIER_LABELS[wrColor(overallWinRate)]} Player</span>`
+      : "";
+
   document.title = `${accountData.nickname} - KokouStats`;
   document.getElementById("player-header-container").innerHTML = `
     <div class="player-header">
       <h2><span id="clan-tag">${resolvedClanTag ? `<a href="/clan/${resolvedClanId}" class="clan-leader-link">[${resolvedClanTag}]</a>` : ""}</span>${accountData.nickname}</h2>
       <div id="captain-title" class="captain-title">${captainTitle}</div>
+      ${developerTag}${skillTag}${hipperTag}
       <div class="player-meta">
         <span>Last Battle: ${new Date(accountData.last_battle_time * 1000).toLocaleString()}</span>
         <span>Updated: ${new Date(accountData.stats_updated_at * 1000).toLocaleString()}</span>
@@ -776,6 +855,39 @@ const romanNumerals = [
   "X",
   "XI",
 ];
+
+// wrColor/prColor/keiColor all share this same 8-tier color scale (just with different
+// numeric breakpoints), so the color they return doubles as a lookup key for the tier name
+const TIER_LABELS = {
+  "#a855f7": "Super Unicum",
+  "#9b59b6": "Unicum",
+  "#3498db": "Great",
+  "#1abc9c": "Very Good",
+  "#2ecc71": "Good",
+  "#f1c40f": "Average",
+  "#e67e22": "Below Average",
+  "#e74c3c": "Bad",
+};
+
+// ascending lower-bound cutoffs for each tier, in the same order as TIER_ORDER/TIER_COLORS —
+// must stay in sync with wrColor/prColor/keiColor above. Used only to compute the "gap to
+// next tier" hero caption, since those color functions don't expose the boundary itself.
+const TIER_ORDER = ["Bad", "Below Average", "Average", "Good", "Very Good", "Great", "Unicum", "Super Unicum"];
+const TIER_COLORS = ["#e74c3c", "#e67e22", "#f1c40f", "#2ecc71", "#1abc9c", "#3498db", "#9b59b6", "#a855f7"];
+const WR_TIER_CUTOFFS = [0, 47, 49, 52, 54, 56, 60, 65];
+const PR_TIER_CUTOFFS = [0, 750, 1100, 1350, 1550, 1750, 2100, 2450];
+const KEI_TIER_CUTOFFS = [0, 50, 58, 63, 68, 73, 80, 90];
+
+// how far a value is from the next tier up, and what that tier is — null once already at the
+// top tier, since there's nothing further to reach
+function nextTierGap(value, cutoffs) {
+  let idx = 0;
+  for (let i = 1; i < cutoffs.length; i++) {
+    if (value >= cutoffs[i]) idx = i;
+  }
+  if (idx >= cutoffs.length - 1) return null;
+  return { label: TIER_ORDER[idx + 1], color: TIER_COLORS[idx + 1], gap: cutoffs[idx + 1] - value };
+}
 
 function wrColor(rate) {
   return rate >= 65
