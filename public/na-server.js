@@ -66,7 +66,11 @@ function makeDistributionChart(id, labels, counts) {
       },
       scales: {
         x: {
-          ticks: { color: "#e0e6ed", autoSkip: true, maxTicksLimit: 20 },
+          ticks: {
+            color: "#e0e6ed",
+            autoSkip: false,
+            callback: (value, index) => (index % 5 === 0 ? `${index}%` : undefined),
+          },
           grid: { color: "#1e3448" },
         },
         y: { ticks: { color: "#e0e6ed" }, grid: { color: "#1e3448" } },
@@ -93,6 +97,80 @@ function loadDistribution(range) {
       }
     })
     .catch((err) => console.error("Error loading winrate distribution:", err));
+}
+
+function makeWinrateByBattlesChart(id, labels, avgWinrates, counts) {
+  const winratePcts = avgWinrates.map((wr) => (wr != null ? wr * 100 : null));
+  const colors = winratePcts.map((pct) => (pct != null ? winrateTierColor(pct) : "#3a4a5c"));
+
+  return new Chart(document.getElementById(id), {
+    type: "line",
+    data: {
+      labels,
+      datasets: [
+        {
+          data: winratePcts,
+          borderColor: "#3498db",
+          backgroundColor: "rgba(52, 152, 219, 0.15)",
+          pointBackgroundColor: colors,
+          pointBorderColor: colors,
+          pointRadius: 5,
+          pointHoverRadius: 7,
+          borderWidth: 2,
+          fill: true,
+          tension: 0.3,
+          spanGaps: true,
+        },
+      ],
+    },
+    options: {
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => {
+              if (ctx.parsed.y == null) return "No data";
+              const count = counts[ctx.dataIndex];
+              return `${ctx.parsed.y.toFixed(2)}% winrate — ${count.toLocaleString()} players`;
+            },
+          },
+        },
+      },
+      scales: {
+        x: {
+          ticks: { color: "#e0e6ed" },
+          grid: { color: "#1e3448" },
+        },
+        y: {
+          ticks: { color: "#e0e6ed", callback: (value) => `${value}%` },
+          grid: { color: "#1e3448" },
+        },
+      },
+    },
+  });
+}
+
+let winrateByBattlesChart = null;
+
+function loadWinrateByBattles(range) {
+  fetch(`/api/na-server/winrate-by-battles?range=${range}`)
+    .then((response) => response.json())
+    .then((data) => {
+      if (winrateByBattlesChart) {
+        winrateByBattlesChart.data.datasets[0].data = data.avgWinrates.map((wr) =>
+          wr != null ? wr * 100 : null,
+        );
+        winrateByBattlesChart.update();
+      } else {
+        winrateByBattlesChart = makeWinrateByBattlesChart(
+          "chart-winrate-by-battles",
+          data.labels,
+          data.avgWinrates,
+          data.counts,
+        );
+      }
+    })
+    .catch((err) => console.error("Error loading winrate by battles played:", err));
 }
 
 function loadSummary(range) {
@@ -153,6 +231,7 @@ function loadSummary(range) {
 function loadRange(range) {
   loadSummary(range);
   loadDistribution(range);
+  loadWinrateByBattles(range);
 }
 
 loadRange("all");

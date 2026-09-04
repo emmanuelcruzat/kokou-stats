@@ -551,6 +551,44 @@ app.get("/api/na-server/winrate-distribution", async (req, res) => {
   }
 });
 
+// average winrate binned by battle count, to see whether more-experienced players tend to
+// win more — bucket edges roughly follow WoWS' own "veteran" experience brackets
+const BATTLES_BUCKETS = [100, 500, 1000, 2500, 5000, 10000, 20000];
+const BATTLES_BUCKET_LABELS = [
+  "<100", "100-499", "500-999", "1,000-2,499", "2,500-4,999", "5,000-9,999", "10,000-19,999", "20,000+",
+];
+
+app.get("/api/na-server/winrate-by-battles", async (req, res) => {
+  try {
+    const where = rangeClause(req.query.range);
+    const caseClauses = BATTLES_BUCKETS.map((edge, i) => `WHEN battles < ${edge} THEN ${i}`).join("\n          ");
+    const result = await pool.query(
+      `SELECT
+         CASE
+           ${caseClauses}
+           ELSE ${BATTLES_BUCKETS.length}
+         END AS bucket,
+         avg(winrate) AS avg_winrate,
+         count(*) AS count
+       FROM player_winrates
+       ${where}
+       GROUP BY bucket`,
+    );
+
+    const avgWinrates = new Array(BATTLES_BUCKET_LABELS.length).fill(null);
+    const counts = new Array(BATTLES_BUCKET_LABELS.length).fill(0);
+    for (const row of result.rows) {
+      avgWinrates[row.bucket] = parseFloat(row.avg_winrate);
+      counts[row.bucket] = parseInt(row.count, 10);
+    }
+
+    res.json({ labels: BATTLES_BUCKET_LABELS, avgWinrates, counts });
+  } catch (err) {
+    console.error("Error fetching winrate by battles played:", err.message);
+    res.status(500).json({ error: "Failed to fetch winrate by battles played" });
+  }
+});
+
 // where a given winrate ranks against the recorded player_winrates sample — used for the
 // "Top X%" tag on player pages. topPercent is the share of tracked players with a strictly
 // higher winrate, so a small number means a strong player
