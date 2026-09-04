@@ -27,6 +27,62 @@ let initialPrReady = false;
 let currentMode = "pvp";
 const modeCache = {};
 
+// windowed (last 24h/7d/30d/90d/365d) Random Battles stats, only available for the pvp mode
+let currentRange = "all";
+let windowsData = null;
+let windowsPromise = null;
+
+const rangeLabels = {
+  all: "",
+  "24h": " (Last 24 Hours)",
+  "7d": " (Last 7 Days)",
+  "30d": " (Last 30 Days)",
+  "90d": " (Last 90 Days)",
+  "365d": " (Last 365 Days)",
+};
+
+function fetchWindows() {
+  if (!windowsPromise) {
+    windowsPromise = fetch(`/api/player/${username}/windows`)
+      .then((r) => r.json())
+      .then((data) => {
+        windowsData = data;
+        return data;
+      })
+      .catch((err) => {
+        console.error("Error loading time-windowed stats:", err);
+        windowsData = { windows: {} };
+        return windowsData;
+      });
+  }
+  return windowsPromise;
+}
+
+// builds the pvp-like stats object to render for the currently selected mode + range,
+// diffing lifetime totals down to just the selected window when one is active
+function getActiveStatsEntry() {
+  const entry = modeCache[currentMode];
+  if (!entry) return { status: "loading" };
+  if (currentMode !== "pvp" || currentRange === "all") {
+    return { status: "ready", ...entry };
+  }
+
+  const windowEntry = windowsData?.windows?.[currentRange];
+  if (windowEntry === undefined) return { status: "loading" };
+  if (windowEntry === null) return { status: "no-history" };
+  if (windowEntry.battles === 0) return { status: "no-battles" };
+
+  const winRate = (windowEntry.wins / windowEntry.battles) * 100;
+  return {
+    status: "ready",
+    pvp: windowEntry,
+    winRate,
+    currentWrColor: wrColor(winRate),
+    pr: null,
+    windowSince: windowEntry.since,
+  };
+}
+
 // shared state for the ships table + charts so they can be re-rendered per battle-type mode
 let sortCol = "battles";
 let sortAsc = false;
@@ -97,16 +153,29 @@ async function loadMode(mode) {
 
 function renderStatGrid() {
   const container = document.getElementById("stat-grid-container");
-  const entry = modeCache[currentMode];
+  const active = getActiveStatsEntry();
 
-  if (!entry) {
+  if (active.status === "loading") {
     container.innerHTML = `<div class="loading"><div class="spinner"></div><p>Loading stats...</p></div>`;
     return;
   }
+  if (active.status === "no-history") {
+    container.innerHTML = `<p class="range-note">Not enough tracked history for this range yet — KokouStats only starts counting from the first time a player is looked up, so check back later.</p>`;
+    return;
+  }
+  if (active.status === "no-battles") {
+    container.innerHTML = `<p class="range-note">This player hasn't played any Random Battles in this range.</p>`;
+    return;
+  }
 
-  const { pvp, winRate, currentWrColor, pr } = entry;
+  const { pvp, winRate, currentWrColor, pr, windowSince } = active;
+  const rangeSuffix = rangeLabels[currentRange] ?? "";
+  const sinceNote = windowSince
+    ? `<p class="range-note">Based on battles played since ${new Date(windowSince).toLocaleString()}</p>`
+    : "";
 
   container.innerHTML = `
+    ${sinceNote}
     <div class="stat-grid">
       <div class="stat-card stat-card-battle">
         <h3>Battle Record</h3>
@@ -117,7 +186,7 @@ function renderStatGrid() {
             : "";
           return `
             <div class="winrate-display" style="color:${currentWrColor}">
-              <div class="metric-label">${battleModeLabels[currentMode]} Winrate</div>
+              <div class="metric-label">${battleModeLabels[currentMode]} Winrate${rangeSuffix}</div>
               <div class="winrate-top">
                 <div class="winrate-pct">${winRate.toFixed(2)}%</div>
                 <div class="winrate-label">${wrLabel(winRate)}</div>
@@ -128,12 +197,16 @@ function renderStatGrid() {
         })()}
         ${(() => {
           if (pr === null) {
+            const label =
+              windowSince != null
+                ? "not available for time-windowed views"
+                : "";
             return `
               <div class="winrate-display" style="color:#546e7a">
                 <div class="metric-label">WoWS Numbers Personal Rating (PR) <a href="https://na.wows-numbers.com/personal/rating" target="_blank" class="info-link">?</a></div>
                 <div class="winrate-top">
                   <div class="metric-pct">—</div>
-                  <div class="winrate-label"></div>
+                  <div class="winrate-label">${label}</div>
                 </div>
               </div>
             `;
@@ -191,7 +264,7 @@ function renderStatGrid() {
         <h3>Sinks</h3>
         ${row("Warships Sunk", pvp.frags.toLocaleString())}
         ${row("Avg. Sunk / Battle", (pvp.frags / pvp.battles).toFixed(2))}
-        ${row("Destruction Ratio", (pvp.frags / (pvp.battles - pvp.survived_battles)).toFixed(2))}
+        ${row("Destruction Ratio", pvp.battles === pvp.survived_battles ? "—" : (pvp.frags / (pvp.battles - pvp.survived_battles)).toFixed(2))}
       </div>
       <div class="stat-card">
         <h3>Experience</h3>
@@ -220,9 +293,46 @@ function tryClanRender() {
   `;
 }
 
+// range toggle: only meaningful for the pvp mode, since that's the only mode we
+// keep a history of snapshots for; hidden and reset whenever another mode is active
+const rangeToggle = document.getElementById("range-toggle");
+const rangeButtons = rangeToggle.querySelectorAll(".battle-type-btn");
+
+function setRangeToggleVisible(visible) {
+  rangeToggle.style.display = visible ? "" : "none";
+}
+
+function resetRangeToggle() {
+  currentRange = "all";
+  rangeButtons.forEach((b) => b.classList.toggle("active", b.dataset.range === "all"));
+}
+
+rangeButtons.forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const range = btn.dataset.range;
+    if (range === currentRange) return;
+
+    rangeButtons.forEach((b) => b.classList.remove("active"));
+    btn.classList.add("active");
+    currentRange = range;
+
+    if (range === "all" || windowsData) {
+      renderStatGrid();
+      return;
+    }
+
+    renderStatGrid();
+    fetchWindows().then(() => {
+      if (currentMode === "pvp") renderStatGrid();
+    });
+  });
+});
+
+setRangeToggleVisible(currentMode === "pvp");
+
 // battle type rack: switches the Battle Record stats (and PR) between
 // Random Battles, Solo, Duo Division, and Trio Division
-const battleTypeButtons = document.querySelectorAll(".battle-type-btn");
+const battleTypeButtons = document.querySelectorAll("#mode-toggle .battle-type-btn");
 battleTypeButtons.forEach((btn) => {
   btn.addEventListener("click", async () => {
     const mode = btn.dataset.mode;
@@ -231,6 +341,8 @@ battleTypeButtons.forEach((btn) => {
     battleTypeButtons.forEach((b) => b.classList.remove("active"));
     btn.classList.add("active");
     currentMode = mode;
+    resetRangeToggle();
+    setRangeToggleVisible(mode === "pvp");
     renderStatGrid();
     renderShipsForMode(mode);
 

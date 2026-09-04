@@ -63,7 +63,7 @@
           </div>
           <div id="clan-card" class="stat-card" style="display: none"></div>
         </div>
-        <div class="battle-type-rack">
+        <div class="battle-type-rack" id="mode-toggle">
           <button class="battle-type-btn active" data-mode="pvp">
             Random Battles
           </button>
@@ -80,6 +80,14 @@
           <button class="battle-type-btn" data-mode="coop">
             Co-Op Battles
           </button>
+        </div>
+        <div class="battle-type-rack" id="range-toggle">
+          <button class="battle-type-btn active" data-range="all">Overall</button>
+          <button class="battle-type-btn" data-range="24h">Last 24 Hours</button>
+          <button class="battle-type-btn" data-range="7d">Last 7 Days</button>
+          <button class="battle-type-btn" data-range="30d">Last 30 Days</button>
+          <button class="battle-type-btn" data-range="90d">Last 90 Days</button>
+          <button class="battle-type-btn" data-range="365d">Last 365 Days</button>
         </div>
         <div id="stat-grid-container">
           <div class="loading">

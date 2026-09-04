@@ -1,7 +1,7 @@
 require("dotenv").config();
 const express = require("express");
 const axios = require("axios");
-const { pool, recordWinrate } = require("./db");
+const { pool, recordWinrate, recordStatSnapshot, getStatWindows } = require("./db");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -16,7 +16,18 @@ async function getAccountId(username) {
   const searchRes = await axios.get(
     `https://api.worldofwarships.com/wows/account/list/?application_id=${process.env.WOWS_API_KEY}&search=${username}`,
   );
-  return searchRes.data.data[0].account_id;
+
+  const results = searchRes.data?.data;
+  if (!results || results.length === 0) {
+    const apiError = searchRes.data?.error;
+    throw new Error(
+      apiError
+        ? `Wargaming API error: ${apiError.message} (field: ${apiError.field ?? "n/a"})`
+        : `No NA-server player found matching "${username}"`,
+    );
+  }
+
+  return results[0].account_id;
 }
 
 // route to serve the player stats page
@@ -69,6 +80,9 @@ app.get("/api/player/:username", async (req, res) => {
     if (pvp && pvp.battles > 0) {
       recordWinrate(username, pvp.wins / pvp.battles, pvp.battles).catch(
         (err) => console.error("Error recording winrate:", err.message),
+      );
+      recordStatSnapshot(accountId, username, pvp).catch((err) =>
+        console.error("Error recording stat snapshot:", err.message),
       );
     }
 
@@ -174,6 +188,31 @@ app.get("/api/player/:username/coop", async (req, res) => {
     if (err.response)
       console.error("Wargaming response:", JSON.stringify(err.response.data));
     res.status(500).json({ error: "Failed to fetch player stats" });
+  }
+});
+
+// windowed (last 24h/7d/30d/90d/365d) Random Battles stats for a player, computed by
+// diffing their current lifetime totals against our own recorded history snapshots.
+// A range comes back null if we haven't tracked this player for long enough yet.
+app.get("/api/player/:username/windows", async (req, res) => {
+  try {
+    const username = req.params.username;
+    const accountId = await getAccountId(username);
+    const accountData = await axios.get(
+      `https://api.worldofwarships.com/wows/account/info/?application_id=${process.env.WOWS_API_KEY}&account_id=${accountId}`,
+    );
+
+    const pvp = accountData.data.data[accountId]?.statistics?.pvp;
+    if (!pvp) {
+      return res.status(403).json({ error: "Player statistics are hidden" });
+    }
+
+    const windows = await getStatWindows(accountId, pvp);
+    res.json({ current: pvp, windows });
+  } catch (err) {
+    console.error("Error fetching windowed player stats:", err.message);
+    console.error("Stack:", err.stack);
+    res.status(500).json({ error: "Failed to fetch windowed player stats" });
   }
 });
 
@@ -306,14 +345,33 @@ app.get("/api/clan/:clanId/members/stats", async (req, res) => {
   }
 });
 
+// supported time windows for the NA Server Stats page, keyed by the ?range= query param
+const NA_SERVER_RANGES = {
+  "24h": "1 day",
+  "7d": "7 days",
+  "30d": "30 days",
+  "90d": "90 days",
+  "365d": "365 days",
+  all: null,
+};
+
+// builds a `WHERE last_updated >= now() - interval '...'` clause for a given ?range=, defaulting to all-time
+function rangeClause(range) {
+  if (!Object.prototype.hasOwnProperty.call(NA_SERVER_RANGES, range)) range = "all";
+  const interval = NA_SERVER_RANGES[range];
+  return interval ? `WHERE last_updated >= now() - interval '${interval}'` : "";
+}
+
 // returns server-wide summary stats for the recorded player winrate sample
 app.get("/api/na-server/summary", async (req, res) => {
   try {
+    const where = rangeClause(req.query.range);
     const result = await pool.query(
       `SELECT count(*) AS total_players,
               coalesce(avg(winrate), 0) AS average_winrate,
               coalesce(avg(battles), 0) AS average_battles
-       FROM player_winrates`,
+       FROM player_winrates
+       ${where}`,
     );
     const row = result.rows[0];
     res.json({
@@ -330,9 +388,11 @@ app.get("/api/na-server/summary", async (req, res) => {
 // returns a 100-bucket histogram (1% wide buckets) of recorded player winrates
 app.get("/api/na-server/winrate-distribution", async (req, res) => {
   try {
+    const where = rangeClause(req.query.range);
     const result = await pool.query(
       `SELECT LEAST(floor(winrate * 100)::int, 99) AS bucket, count(*) AS count
        FROM player_winrates
+       ${where}
        GROUP BY bucket`,
     );
 
